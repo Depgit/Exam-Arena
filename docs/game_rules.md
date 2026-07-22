@@ -257,8 +257,6 @@ Players may spend time strategically.
 
 # 10. Scoring
 
-
-
 Question Score = Base Score × Difficulty Multiplier × Accuracy Multiplier
 
 Speed Bonus = Remaining Match Time × Bonus Factor
@@ -267,7 +265,7 @@ Wrong Answer = 0
 
 Skipped Question = 0
 
-### OR
+OR
 
 Difficulty 1 = 50 points
 Difficulty 2 = 75 points
