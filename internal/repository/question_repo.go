@@ -1,0 +1,258 @@
+package repository
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/exam-arena/internal/models"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type QuestionRepo struct {
+	db *pgxpool.Pool
+}
+
+func NewQuestionRepo(db *pgxpool.Pool) *QuestionRepo {
+	return &QuestionRepo{db: db}
+}
+
+func (r *QuestionRepo) GetRandomQuestions(ctx context.Context, categoryID string, count int) ([]models.Question, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, exam_category_id, topic_id, question_type, difficulty,
+		       language, body, explanation, estimated_time_seconds, status, created_at
+		FROM questions
+		WHERE exam_category_id = $1 AND status = 'published'
+		ORDER BY RANDOM()
+		LIMIT $2
+	`, categoryID, count)
+	if err != nil {
+		return nil, fmt.Errorf("get random questions: %w", err)
+	}
+	defer rows.Close()
+
+	var questions []models.Question
+	for rows.Next() {
+		var q models.Question
+		if err := rows.Scan(
+			&q.ID, &q.ExamCategoryID, &q.TopicID, &q.QuestionType,
+			&q.Difficulty, &q.Language, &q.Body, &q.Explanation,
+			&q.EstimatedTimeSeconds, &q.Status, &q.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		questions = append(questions, q)
+	}
+
+	// Load options for each question
+	for i := range questions {
+		options, err := r.GetOptions(ctx, questions[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		questions[i].Options = options
+	}
+
+	return questions, nil
+}
+
+func (r *QuestionRepo) GetByID(ctx context.Context, id string) (*models.Question, error) {
+	q := &models.Question{}
+	err := r.db.QueryRow(ctx, `
+		SELECT id, exam_category_id, topic_id, question_type, difficulty,
+		       language, body, explanation, estimated_time_seconds, status, created_at
+		FROM questions WHERE id = $1
+	`, id).Scan(
+		&q.ID, &q.ExamCategoryID, &q.TopicID, &q.QuestionType,
+		&q.Difficulty, &q.Language, &q.Body, &q.Explanation,
+		&q.EstimatedTimeSeconds, &q.Status, &q.CreatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	options, err := r.GetOptions(ctx, q.ID)
+	if err != nil {
+		return nil, err
+	}
+	q.Options = options
+
+	return q, nil
+}
+
+func (r *QuestionRepo) GetOptions(ctx context.Context, questionID string) ([]models.QuestionOption, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, question_id, option_text, is_correct, order_index
+		FROM question_options WHERE question_id = $1 ORDER BY order_index
+	`, questionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var options []models.QuestionOption
+	for rows.Next() {
+		var o models.QuestionOption
+		if err := rows.Scan(&o.ID, &o.QuestionID, &o.OptionText, &o.IsCorrect, &o.OrderIndex); err != nil {
+			return nil, err
+		}
+		options = append(options, o)
+	}
+	return options, nil
+}
+
+func (r *QuestionRepo) Create(ctx context.Context, q *models.Question, options []models.QuestionOption) (*models.Question, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	err = tx.QueryRow(ctx, `
+		INSERT INTO questions (exam_category_id, topic_id, question_type, difficulty, body, explanation, estimated_time_seconds, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, created_at
+	`, q.ExamCategoryID, q.TopicID, q.QuestionType, q.Difficulty, q.Body, q.Explanation, q.EstimatedTimeSeconds, q.Status,
+	).Scan(&q.ID, &q.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, opt := range options {
+		err = tx.QueryRow(ctx, `
+			INSERT INTO question_options (question_id, option_text, is_correct, order_index)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id
+		`, q.ID, opt.OptionText, opt.IsCorrect, i+1).Scan(&options[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		options[i].QuestionID = q.ID
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	q.Options = options
+	return q, nil
+}
+
+// Add these two methods to the existing QuestionRepo struct.
+// The rest of the file is unchanged.
+
+// GetAllPublished returns every published question (with options) for one category.
+// Called by QuestionBank.Warm() at startup and on each refresh tick.
+func (r *QuestionRepo) GetAllPublished(ctx context.Context, categoryID string) ([]models.Question, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, exam_category_id, topic_id, question_type, difficulty,
+		       language, body, explanation, estimated_time_seconds, status, created_at
+		FROM   questions
+		WHERE  exam_category_id = $1
+		  AND  status = 'published'
+		ORDER  BY created_at DESC
+	`, categoryID)
+	if err != nil {
+		return nil, fmt.Errorf("get all published: %w", err)
+	}
+	defer rows.Close()
+
+	var questions []models.Question
+	for rows.Next() {
+		var q models.Question
+		if err := rows.Scan(
+			&q.ID, &q.ExamCategoryID, &q.TopicID, &q.QuestionType,
+			&q.Difficulty, &q.Language, &q.Body, &q.Explanation,
+			&q.EstimatedTimeSeconds, &q.Status, &q.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		questions = append(questions, q)
+	}
+
+	// Bulk-load all options for these questions in ONE query (no N+1)
+	if len(questions) == 0 {
+		return questions, nil
+	}
+
+	qIDs := make([]string, len(questions))
+	for i, q := range questions {
+		qIDs[i] = q.ID
+	}
+
+	optRows, err := r.db.Query(ctx, `
+		SELECT id, question_id, option_text, is_correct, order_index
+		FROM   question_options
+		WHERE  question_id = ANY($1)
+		ORDER  BY question_id, order_index
+	`, qIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get options bulk: %w", err)
+	}
+	defer optRows.Close()
+
+	// Index questions by ID for O(1) lookup while attaching options
+	qMap := make(map[string]*models.Question, len(questions))
+	for i := range questions {
+		qMap[questions[i].ID] = &questions[i]
+	}
+
+	for optRows.Next() {
+		var o models.QuestionOption
+		if err := optRows.Scan(&o.ID, &o.QuestionID, &o.OptionText, &o.IsCorrect, &o.OrderIndex); err != nil {
+			return nil, err
+		}
+		if q, ok := qMap[o.QuestionID]; ok {
+			q.Options = append(q.Options, o)
+		}
+	}
+
+	return questions, nil
+}
+
+// GetActiveCategoryIDs returns the UUIDs of all active exam categories.
+// Used by QuestionBank to know which categories to warm.
+func (r *QuestionRepo) GetActiveCategoryIDs(ctx context.Context) ([]string, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id FROM exam_categories WHERE is_active = true
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func (r *QuestionRepo) Publish(ctx context.Context, questionID string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE questions SET status = 'published', published_at = now() WHERE id = $1
+	`, questionID)
+	return err
+}
+
+func (r *QuestionRepo) GetQuestionCount(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM questions WHERE status = 'published'`).Scan(&count)
+	return count, err
+}
+
+func (r *QuestionRepo) IsOptionCorrect(ctx context.Context, optionID string) (bool, error) {
+	var isCorrect bool
+	err := r.db.QueryRow(ctx, `SELECT is_correct FROM question_options WHERE id = $1`, optionID).Scan(&isCorrect)
+	if err != nil {
+		return false, err
+	}
+	return isCorrect, nil
+}
