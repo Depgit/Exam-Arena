@@ -21,9 +21,9 @@ func (r *UserRepo) Create(ctx context.Context, username, email, passwordHash str
 	user := &models.User{}
 	err := r.db.QueryRow(ctx, `
 		INSERT INTO users (username, email, password_hash, display_name)
-		VALUES ($1, $2, $3, $1)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id, username, email, display_name, role, status, created_at, updated_at
-	`, username, email, passwordHash).Scan(
+	`, username, email, passwordHash, username).Scan(
 		&user.ID, &user.Username, &user.Email, &user.DisplayName,
 		&user.Role, &user.Status, &user.CreatedAt, &user.UpdatedAt,
 	)

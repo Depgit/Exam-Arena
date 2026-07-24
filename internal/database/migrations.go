@@ -11,7 +11,7 @@ import (
 var initialSchema string
 
 func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
-	// Simple migration: create a tracking table, run if not applied yet.
+	// Create migrations tracking table
 	_, err := pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version INTEGER PRIMARY KEY,
@@ -22,20 +22,24 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 		return err
 	}
 
+	// Check if migration 1 was already applied
 	var exists bool
 	err = pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = 1)`).Scan(&exists)
 	if err != nil {
 		return err
 	}
 
-	if !exists {
-		if _, err := pool.Exec(ctx, initialSchema); err != nil {
-			return err
-		}
-		if _, err := pool.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES (1)`); err != nil {
-			return err
-		}
+	if exists {
+		return nil // Already migrated
 	}
 
-	return nil
+	// Run the migration
+	_, err = pool.Exec(ctx, initialSchema)
+	if err != nil {
+		return err
+	}
+
+	// Record the migration
+	_, err = pool.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES (1)`)
+	return err
 }
