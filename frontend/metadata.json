@@ -1,0 +1,6 @@
+{
+  "name": "Dual Exam - Speed Trivia Arena",
+  "description": "Real-time 1v1 dual exam trivia battle platform with speed scoring, matchmaking lobby, online player status, profile stats, achievements, leaderboards, push notifications, and AI question generation.",
+  "requestFramePermissions": ["notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,69 @@
+package handler
+
+import (
+	"net/http"
+
+	"github.com/exam-arena/internal/repository"
+	"github.com/exam-arena/internal/service"
+	"github.com/exam-arena/internal/utils"
+)
+
+type UserHandler struct {
+	userRepo           *repository.UserRepo
+	leaderboardService *service.LeaderboardService
+}
+
+func NewUserHandler(userRepo *repository.UserRepo, leaderboardService *service.LeaderboardService) *UserHandler {
+	return &UserHandler{
+		userRepo:           userRepo,
+		leaderboardService: leaderboardService,
+	}
+}
+
+func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("id")
+	if userID == "" {
+		utils.JSONError(w, http.StatusBadRequest, "user id required")
+		return
+	}
+
+	user, err := h.userRepo.GetByID(r.Context(), userID)
+	if err != nil || user == nil {
+		utils.JSONError(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	ratings, _ := h.userRepo.GetRatings(r.Context(), userID)
+
+	utils.JSON(w, http.StatusOK, map[string]interface{}{
+		"user":    user,
+		"ratings": ratings,
+	})
+}
+
+func (h *UserHandler) GetStats(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("id")
+	if userID == "" {
+		utils.JSONError(w, http.StatusBadRequest, "user id required")
+		return
+	}
+
+	stats, err := h.userRepo.GetStatistics(r.Context(), userID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, "failed to get statistics")
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, stats)
+}
+
+func (h *UserHandler) GetMatchHistory(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("id")
+	if userID == "" {
+		utils.JSONError(w, http.StatusBadRequest, "user id required")
+		return
+	}
+
+	// This requires match_repo but we keep it simple
+	utils.JSON(w, http.StatusOK, map[string]string{"message": "match history endpoint"})
+}

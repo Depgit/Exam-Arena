@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@layer utilities {
+  /* Keyframe animations for UI/UX Pro Max polish */
+  @keyframes floatSlow {
+    0%, 100% {
+      transform: rotate(-12deg) translateY(0px);
+    }
+    50% {
+      transform: rotate(-10deg) translateY(-10px);
+    }
+  }
+
+  @keyframes floatReverse {
+    0%, 100% {
+      transform: rotate(8deg) translateY(0px);
+    }
+    50% {
+      transform: rotate(10deg) translateY(-12px);
+    }
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% {
+      opacity: 0.4;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.08);
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+}
+
+.animate-float-slow {
+  animation: floatSlow 6s ease-in-out infinite;
+}
+
+.animate-float-reverse {
+  animation: floatReverse 7s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 4s ease-in-out infinite;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
+}

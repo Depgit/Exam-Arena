@@ -1,0 +1,125 @@
+{
+  "entities": {
+    "users": {
+      "title": "Users",
+      "description": "User profiles, MMR, stats, achievements, and online status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "title": { "type": "string" },
+        "mmr": { "type": "number" },
+        "totalMatches": { "type": "number" },
+        "wins": { "type": "number" },
+        "losses": { "type": "number" },
+        "totalPoints": { "type": "number" },
+        "avgResponseTimeMs": { "type": "number" },
+        "accuracyPercentage": { "type": "number" },
+        "highestStreak": { "type": "number" },
+        "currentStreak": { "type": "number" },
+        "unlockedAchievements": { "type": "array", "items": { "type": "string" } },
+        "favoriteCategory": { "type": "string" },
+        "status": { "type": "string", "enum": ["online", "in_match", "offline"] },
+        "bio": { "type": "string" },
+        "joinedDate": { "type": "string" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["username", "mmr"]
+    },
+    "matches": {
+      "title": "Matches",
+      "description": "Real-time 1v1 Dual Exam match rooms",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "roomCode": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string", "enum": ["waiting", "starting", "in_progress", "round_ended", "completed"] },
+        "player1": { "type": "object" },
+        "player2": { "type": "object" },
+        "questions": { "type": "array", "items": { "type": "object" } },
+        "currentQuestionIndex": { "type": "number" },
+        "questionStartTime": { "type": "number" },
+        "timeLimitSeconds": { "type": "number" },
+        "winnerId": { "type": "string" },
+        "emotes": { "type": "array", "items": { "type": "object" } },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["category", "status", "player1"]
+    },
+    "globalChat": {
+      "title": "Global Chat Messages",
+      "description": "Global arena chat room messages",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderAvatar": { "type": "string" },
+        "senderTitle": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "isSystem": { "type": "boolean" }
+      },
+      "required": ["senderId", "text", "timestamp"]
+    },
+    "notifications": {
+      "title": "User Notifications",
+      "description": "Notifications and challenge invites sent to users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "recipientId": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "read": { "type": "boolean" },
+        "actionPayload": { "type": "object" }
+      },
+      "required": ["recipientId", "title", "timestamp"]
+    }
+  },
+  "security": {
+    "rules": [
+      {
+        "collection": "users",
+        "allow": {
+          "read": "true",
+          "create": "request.auth != null",
+          "update": "request.auth != null",
+          "delete": "request.auth != null && request.auth.uid == resource.id"
+        }
+      },
+      {
+        "collection": "matches",
+        "allow": {
+          "read": "true",
+          "create": "request.auth != null",
+          "update": "request.auth != null",
+          "delete": "request.auth != null"
+        }
+      },
+      {
+        "collection": "globalChat",
+        "allow": {
+          "read": "true",
+          "create": "request.auth != null",
+          "update": "request.auth != null",
+          "delete": "request.auth != null"
+        }
+      },
+      {
+        "collection": "notifications",
+        "allow": {
+          "read": "request.auth != null",
+          "create": "request.auth != null",
+          "update": "request.auth != null",
+          "delete": "request.auth != null"
+        }
+      }
+    ]
+  }
+}

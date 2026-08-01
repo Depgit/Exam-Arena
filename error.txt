@@ -1,0 +1,27 @@
+Console Error
+
+
+Error saving profile to Firestore: "Missing or insufficient permissions."
+
+lib\firestoreService.ts (196:13) @ saveProfileToFirestore
+
+
+  194 |     await setDoc(userRef, { ...profile, id: targetId, updatedAt: Date.now() }, { merge: true });
+  195 |   } catch (e: any) {
+> 196 |     console.error('Error saving profile to Firestore:', e?.message || e);
+      |             ^
+  197 |   }
+  198 | }
+  199 |
+Call Stack
+4
+
+Hide 3 ignore-listed frame(s)
+createConsoleError
+node_modules\next\dist\next-devtools\shared\console-error.js (26:1)
+handleConsoleError
+node_modules\next\dist\next-devtools\userspace\app\errors\use-error-handler.js (50:1)
+console.error
+node_modules\next\dist\next-devtools\userspace\app\errors\intercept-console-error.js (55:1)
+saveProfileToFirestore
+lib\firestoreService.ts (196:13)

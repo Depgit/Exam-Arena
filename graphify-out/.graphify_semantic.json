@@ -1,0 +1,248 @@
+{
+  "nodes": [
+    {
+      "id": "Doc::README.md",
+      "label": "README.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\README.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\README.md:1",
+      "summary": "Documentation file README.md"
+    },
+    {
+      "id": "Doc::docker-compose.yml",
+      "label": "docker-compose.yml",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docker\\docker-compose.yml",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docker\\docker-compose.yml:1",
+      "summary": "Documentation file docker-compose.yml"
+    },
+    {
+      "id": "Doc::architecture.md",
+      "label": "architecture.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\architecture.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\architecture.md:1",
+      "summary": "Documentation file architecture.md"
+    },
+    {
+      "id": "Doc::authentication.md",
+      "label": "authentication.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\authentication.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\authentication.md:1",
+      "summary": "Documentation file authentication.md"
+    },
+    {
+      "id": "Doc::battle.md",
+      "label": "battle.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\battle.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\battle.md:1",
+      "summary": "Documentation file battle.md"
+    },
+    {
+      "id": "Doc::battle_protocol.md",
+      "label": "battle_protocol.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\battle_protocol.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\battle_protocol.md:1",
+      "summary": "Documentation file battle_protocol.md"
+    },
+    {
+      "id": "Doc::common.md",
+      "label": "common.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\common.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\common.md:1",
+      "summary": "Documentation file common.md"
+    },
+    {
+      "id": "Doc::errors.md",
+      "label": "errors.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\errors.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\errors.md:1",
+      "summary": "Documentation file errors.md"
+    },
+    {
+      "id": "Doc::matchmaking.md",
+      "label": "matchmaking.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\matchmaking.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\matchmaking.md:1",
+      "summary": "Documentation file matchmaking.md"
+    },
+    {
+      "id": "Doc::practice.md",
+      "label": "practice.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\practice.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\practice.md:1",
+      "summary": "Documentation file practice.md"
+    },
+    {
+      "id": "Doc::subjects.md",
+      "label": "subjects.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\subjects.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\subjects.md:1",
+      "summary": "Documentation file subjects.md"
+    },
+    {
+      "id": "Doc::users.md",
+      "label": "users.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\users.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api\\users.md:1",
+      "summary": "Documentation file users.md"
+    },
+    {
+      "id": "Doc::api_contract.md",
+      "label": "api_contract.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api_contract.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\api_contract.md:1",
+      "summary": "Documentation file api_contract.md"
+    },
+    {
+      "id": "Doc::database.md",
+      "label": "database.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\database.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\database.md:1",
+      "summary": "Documentation file database.md"
+    },
+    {
+      "id": "Doc::query_design.md",
+      "label": "query_design.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\query_design.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\query_design.md:1",
+      "summary": "Documentation file query_design.md"
+    },
+    {
+      "id": "Doc::websocket.md",
+      "label": "websocket.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\websocket.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\code_part\\websocket.md:1",
+      "summary": "Documentation file websocket.md"
+    },
+    {
+      "id": "Doc::design_system.md",
+      "label": "design_system.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\design_system.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\design_system.md:1",
+      "summary": "Documentation file design_system.md"
+    },
+    {
+      "id": "Doc::domain_model.md",
+      "label": "domain_model.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\domain_model.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\domain_model.md:1",
+      "summary": "Documentation file domain_model.md"
+    },
+    {
+      "id": "Doc::feature_spec.md",
+      "label": "feature_spec.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\feature_spec.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\feature_spec.md:1",
+      "summary": "Documentation file feature_spec.md"
+    },
+    {
+      "id": "Doc::game_rules.md",
+      "label": "game_rules.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\game_rules.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\game_rules.md:1",
+      "summary": "Documentation file game_rules.md"
+    },
+    {
+      "id": "Doc::internal_design.md",
+      "label": "internal_design.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\internal_design.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\internal_design.md:1",
+      "summary": "Documentation file internal_design.md"
+    },
+    {
+      "id": "Doc::module_design.md",
+      "label": "module_design.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\module_design.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\module_design.md:1",
+      "summary": "Documentation file module_design.md"
+    },
+    {
+      "id": "Doc::package_structure.md",
+      "label": "package_structure.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\package_structure.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\package_structure.md:1",
+      "summary": "Documentation file package_structure.md"
+    },
+    {
+      "id": "Doc::requirement.md",
+      "label": "requirement.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\requirement.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\requirement.md:1",
+      "summary": "Documentation file requirement.md"
+    },
+    {
+      "id": "Doc::system_context.md",
+      "label": "system_context.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\system_context.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\system_context.md:1",
+      "summary": "Documentation file system_context.md"
+    },
+    {
+      "id": "Doc::ui_wireframes.md",
+      "label": "ui_wireframes.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\ui_wireframes.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\ui_wireframes.md:1",
+      "summary": "Documentation file ui_wireframes.md"
+    },
+    {
+      "id": "Doc::user_flow.md",
+      "label": "user_flow.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\user_flow.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\user_flow.md:1",
+      "summary": "Documentation file user_flow.md"
+    },
+    {
+      "id": "Doc::vision.md",
+      "label": "vision.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\docs\\vision.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\docs\\vision.md:1",
+      "summary": "Documentation file vision.md"
+    },
+    {
+      "id": "Doc::schema-design.md",
+      "label": "schema-design.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\backend\\schema-design.md",
+      "source_location": "E:\\dipak\\ExamArena\\backend\\schema-design.md:1",
+      "summary": "Documentation file schema-design.md"
+    },
+    {
+      "id": "Doc::README.md",
+      "label": "README.md",
+      "type": "DOCUMENT",
+      "source_file": "E:\\dipak\\ExamArena\\frontend\\README.md",
+      "source_location": "E:\\dipak\\ExamArena\\frontend\\README.md:1",
+      "summary": "Documentation file README.md"
+    }
+  ],
+  "edges": [],
+  "hyperedges": [],
+  "input_tokens": 0,
+  "output_tokens": 0
+}
