@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="accent">#06B6D4</color>
+    <color name="background_dark">#0F172A</color>
+    <color name="background_light">#F8FAFC</color>
+    <color name="primary">#4F46E5</color>
+    <color name="primary_dark">#3730A3</color>
+    <color name="surface_dark">#1E293B</color>
+    <color name="surface_light">#FFFFFF</color>
+    <string name="app_name">Exam Arena</string>
+    <string name="app_tagline">Compete • Learn • Improve</string>
+    <style name="Theme.ExamArena" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

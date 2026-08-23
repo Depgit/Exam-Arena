@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Crossed Swords / Arena Badge Icon -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,28 L54,44 L70,28 L76,34 L60,50 L76,66 L70,72 L54,56 L38,72 L32,66 L48,50 L32,34 Z" />
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M54,20 L62,34 L54,40 L46,34 Z" />
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M54,88 L46,74 L54,68 L62,74 Z" />
+</vector>

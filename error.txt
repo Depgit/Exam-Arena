@@ -1,27 +1,53 @@
-Console Error
+Microsoft Windows [Version 10.0.26100.8655]
+(c) Microsoft Corporation. All rights reserved.
 
+E:\dipak\ExamArena\frontend_app>export_apk.bat
+======================================================================
+                    EXAM ARENA - APK BUILD UTILITY
+======================================================================
 
-Error saving profile to Firestore: "Missing or insufficient permissions."
+[1/4] Checking Java Runtime Environment...
+      Found Java: C:\Users\durga\AppData\Local\Programs\Android Studio\jbr
+[2/4] Checking Android SDK...
+      Found Android SDK: D:\Android\Sdk
+[3/4] Verifying Gradle wrapper...
+[4/4] Building Debug APK (assembleDebug)...
+      This may take a minute on the first run while Gradle syncs...
 
-lib\firestoreService.ts (196:13) @ saveProfileToFirestore
+Downloading https://services.gradle.org/distributions/gradle-8.11.1-bin.zip
 
+Exception in thread "main" java.net.ConnectException: Connection timed out: getsockopt
+        at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+        at java.base/sun.nio.ch.Net.pollConnectNow(Unknown Source)
+        at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(Unknown Source)
+        at java.base/sun.nio.ch.NioSocketImpl.connect(Unknown Source)
+        at java.base/java.net.SocksSocketImpl.connect(Unknown Source)
+        at java.base/java.net.Socket.connect(Unknown Source)
+        at java.base/sun.security.ssl.SSLSocketImpl.connect(Unknown Source)
+        at java.base/sun.net.NetworkClient.doConnect(Unknown Source)
+        at java.base/sun.net.www.http.HttpClient.openServer(Unknown Source)
+        at java.base/sun.net.www.http.HttpClient.openServer(Unknown Source)
+        at java.base/sun.net.www.protocol.https.HttpsClient.<init>(Unknown Source)
+        at java.base/sun.net.www.protocol.https.HttpsClient.New(Unknown Source)
+        at java.base/sun.net.www.protocol.https.AbstractDelegateHttpsURLConnection.getNewHttpClient(Unknown Source)
+        at java.base/sun.net.www.protocol.http.HttpURLConnection.plainConnect0(Unknown Source)
+        at java.base/sun.net.www.protocol.http.HttpURLConnection.plainConnect(Unknown Source)
+        at java.base/sun.net.www.protocol.https.AbstractDelegateHttpsURLConnection.connect(Unknown Source)
+        at java.base/sun.net.www.protocol.http.HttpURLConnection.followRedirect0(Unknown Source)
+        at java.base/sun.net.www.protocol.http.HttpURLConnection.followRedirect(Unknown Source)
+        at java.base/sun.net.www.protocol.http.HttpURLConnection.getInputStream0(Unknown Source)
+        at java.base/sun.net.www.protocol.http.HttpURLConnection.getInputStream(Unknown Source)
+        at java.base/sun.net.www.protocol.https.HttpsURLConnectionImpl.getInputStream(Unknown Source)
+        at org.gradle.wrapper.Install.forceFetch(SourceFile:2)
+        at org.gradle.wrapper.Install$1.call(SourceFile:8)
+        at org.gradle.wrapper.GradleWrapperMain.main(SourceFile:67)
 
-  194 |     await setDoc(userRef, { ...profile, id: targetId, updatedAt: Date.now() }, { merge: true });
-  195 |   } catch (e: any) {
-> 196 |     console.error('Error saving profile to Firestore:', e?.message || e);
-      |             ^
-  197 |   }
-  198 | }
-  199 |
-Call Stack
-4
+======================================================================
+[BUILD FAILED] Gradle encountered an error building the APK.
+======================================================================
+Please check the error log above.
+Tip: Ensure Android SDK platforms and build-tools are installed via
 
-Hide 3 ignore-listed frame(s)
-createConsoleError
-node_modules\next\dist\next-devtools\shared\console-error.js (26:1)
-handleConsoleError
-node_modules\next\dist\next-devtools\userspace\app\errors\use-error-handler.js (50:1)
-console.error
-node_modules\next\dist\next-devtools\userspace\app\errors\intercept-console-error.js (55:1)
-saveProfileToFirestore
-lib\firestoreService.ts (196:13)
+Press any key to continue . . .
+
+E:\dipak\ExamArena\frontend_app>
