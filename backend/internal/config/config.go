@@ -11,6 +11,7 @@ type Config struct {
 	ServerHost          string
 	ServerPort          string
 	Environment         string
+	DatabaseDriver      string
 	DatabaseURL         string
 	DBMaxConns          int32
 	DBMinConns          int32
@@ -28,6 +29,7 @@ func Load() (*Config, error) {
 		ServerHost:         getEnv("SERVER_HOST", "0.0.0.0"),
 		ServerPort:         getEnv("SERVER_PORT", "8080"),
 		Environment:        getEnv("ENVIRONMENT", "development"),
+		DatabaseDriver:     getEnv("DATABASE_DRIVER", "sqlite"),
 		DatabaseURL:        getEnv("DATABASE_URL", "exam_arena.db"),
 		JWTSecret:          getEnv("JWT_SECRET", "drpzet_default_secret_key_123"),
 		CORSAllowedOrigins: getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"),

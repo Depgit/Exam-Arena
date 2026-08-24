@@ -1,0 +1,33 @@
+[Unit]
+Description=ExamArena Backend Service
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=examarena
+Group=examarena
+WorkingDirectory=/opt/examarena
+ExecStart=/opt/examarena/bin/exam-arena
+Restart=always
+RestartSec=5s
+
+# Environment Configuration
+Environment=ENVIRONMENT=production
+Environment=SERVER_HOST=127.0.0.1
+Environment=SERVER_PORT=8080
+EnvironmentFile=/opt/examarena/.env
+
+# Hardening & Security Limits
+LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+# Logging
+StandardOutput=append:/var/log/examarena/output.log
+StandardError=append:/var/log/examarena/error.log
+
+[Install]
+WantedBy=multi-user.target

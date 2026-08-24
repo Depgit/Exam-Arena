@@ -172,8 +172,9 @@ func (r *UserRepo) GetRating(ctx context.Context, userID, categoryID string) (*m
 
 func (r *UserRepo) EnsureRating(ctx context.Context, userID, categoryID string) (*models.UserRating, error) {
 	_, _ = r.db.ExecContext(ctx, `
-		INSERT OR IGNORE INTO user_ratings (user_id, exam_category_id, rating, matches_played)
+		INSERT INTO user_ratings (user_id, exam_category_id, rating, matches_played)
 		VALUES ($1, $2, 1200, 0)
+		ON CONFLICT (user_id, exam_category_id) DO NOTHING
 	`, userID, categoryID)
 	return r.GetRating(ctx, userID, categoryID)
 }

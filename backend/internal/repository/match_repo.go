@@ -190,8 +190,9 @@ func (r *MatchRepo) SaveAnswer(ctx context.Context, ans *models.MatchAnswer) err
 	}
 
 	_, err := r.db.ExecContext(ctx, `
-		INSERT OR IGNORE INTO match_answers (id, match_id, user_id, question_id, selected_option_id, is_correct, time_taken_ms)
+		INSERT INTO match_answers (id, match_id, user_id, question_id, selected_option_id, is_correct, time_taken_ms)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (match_id, user_id, question_id) DO NOTHING
 	`, id, ans.MatchID, ans.UserID, ans.QuestionID, ans.SelectedOptionID, isCorrectInt, ans.TimeTakenMs)
 	return err
 }

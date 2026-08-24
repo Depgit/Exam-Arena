@@ -31,7 +31,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	db, err := database.NewSQLite(context.Background(), cfg.DatabaseURL)
+	db, err := database.InitDB(context.Background(), cfg)
 	if err != nil {
 		slog.Error("database", "error", err)
 		os.Exit(1)

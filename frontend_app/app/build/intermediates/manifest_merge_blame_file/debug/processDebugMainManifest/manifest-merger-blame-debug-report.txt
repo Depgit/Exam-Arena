@@ -19,15 +19,15 @@
 13-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:6:22-63
 14
 15    <permission
-15-->[androidx.core:core:1.15.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\ec80e0c2c6af66c9bd82c7b978d0b981\transformed\core-1.15.0\AndroidManifest.xml:22:5-24:47
+15-->[androidx.core:core:1.15.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\7911a1379590392d68c0c7a9925997a8\transformed\core-1.15.0\AndroidManifest.xml:22:5-24:47
 16        android:name="com.examarena.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
-16-->[androidx.core:core:1.15.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\ec80e0c2c6af66c9bd82c7b978d0b981\transformed\core-1.15.0\AndroidManifest.xml:23:9-81
+16-->[androidx.core:core:1.15.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\7911a1379590392d68c0c7a9925997a8\transformed\core-1.15.0\AndroidManifest.xml:23:9-81
 17        android:protectionLevel="signature" />
-17-->[androidx.core:core:1.15.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\ec80e0c2c6af66c9bd82c7b978d0b981\transformed\core-1.15.0\AndroidManifest.xml:24:9-44
+17-->[androidx.core:core:1.15.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\7911a1379590392d68c0c7a9925997a8\transformed\core-1.15.0\AndroidManifest.xml:24:9-44
 18
 19    <uses-permission android:name="com.examarena.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
-19-->[androidx.core:core:1.15.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\ec80e0c2c6af66c9bd82c7b978d0b981\transformed\core-1.15.0\AndroidManifest.xml:26:5-97
-19-->[androidx.core:core:1.15.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\ec80e0c2c6af66c9bd82c7b978d0b981\transformed\core-1.15.0\AndroidManifest.xml:26:22-94
+19-->[androidx.core:core:1.15.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\7911a1379590392d68c0c7a9925997a8\transformed\core-1.15.0\AndroidManifest.xml:26:5-97
+19-->[androidx.core:core:1.15.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\7911a1379590392d68c0c7a9925997a8\transformed\core-1.15.0\AndroidManifest.xml:26:22-94
 20
 21    <application
 21-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:8:5-30:19
@@ -36,7 +36,7 @@
 23        android:allowBackup="true"
 23-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:10:9-35
 24        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
-24-->[androidx.core:core:1.15.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\ec80e0c2c6af66c9bd82c7b978d0b981\transformed\core-1.15.0\AndroidManifest.xml:28:18-86
+24-->[androidx.core:core:1.15.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\7911a1379590392d68c0c7a9925997a8\transformed\core-1.15.0\AndroidManifest.xml:28:18-86
 25        android:dataExtractionRules="@xml/data_extraction_rules"
 25-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:11:9-65
 26        android:debuggable="true"
@@ -51,112 +51,113 @@
 31-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:15:9-54
 32        android:supportsRtl="true"
 32-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:16:9-35
-33        android:theme="@style/Theme.ExamArena"
-33-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:17:9-47
-34        android:usesCleartextTraffic="true" >
-34-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:18:9-44
-35        <activity
-35-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:19:9-29:20
-36            android:name="com.examarena.MainActivity"
-36-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:20:13-41
-37            android:exported="true"
-37-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:21:13-36
-38            android:label="@string/app_name"
-38-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:22:13-45
-39            android:theme="@style/Theme.ExamArena"
-39-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:23:13-51
-40            android:windowSoftInputMode="adjustResize" >
-40-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:24:13-55
-41            <intent-filter>
-41-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:25:13-28:29
-42                <action android:name="android.intent.action.MAIN" />
-42-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:26:17-69
-42-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:26:25-66
-43
-44                <category android:name="android.intent.category.LAUNCHER" />
-44-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:27:17-77
-44-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:27:27-74
-45            </intent-filter>
-46        </activity>
-47        <activity
-47-->[androidx.compose.ui:ui-tooling-android:1.7.8] C:\Users\durga\.gradle\caches\8.11.1\transforms\3cbf778bbdfb9ba8503beb40109a49ff\transformed\ui-tooling-release\AndroidManifest.xml:23:9-25:39
-48            android:name="androidx.compose.ui.tooling.PreviewActivity"
-48-->[androidx.compose.ui:ui-tooling-android:1.7.8] C:\Users\durga\.gradle\caches\8.11.1\transforms\3cbf778bbdfb9ba8503beb40109a49ff\transformed\ui-tooling-release\AndroidManifest.xml:24:13-71
-49            android:exported="true" />
-49-->[androidx.compose.ui:ui-tooling-android:1.7.8] C:\Users\durga\.gradle\caches\8.11.1\transforms\3cbf778bbdfb9ba8503beb40109a49ff\transformed\ui-tooling-release\AndroidManifest.xml:25:13-36
-50
-51        <provider
-51-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\8a384624d5351cfd8bf32be8f0f22002\transformed\emoji2-1.3.0\AndroidManifest.xml:24:9-32:20
-52            android:name="androidx.startup.InitializationProvider"
-52-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\8a384624d5351cfd8bf32be8f0f22002\transformed\emoji2-1.3.0\AndroidManifest.xml:25:13-67
-53            android:authorities="com.examarena.debug.androidx-startup"
-53-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\8a384624d5351cfd8bf32be8f0f22002\transformed\emoji2-1.3.0\AndroidManifest.xml:26:13-68
-54            android:exported="false" >
-54-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\8a384624d5351cfd8bf32be8f0f22002\transformed\emoji2-1.3.0\AndroidManifest.xml:27:13-37
-55            <meta-data
-55-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\8a384624d5351cfd8bf32be8f0f22002\transformed\emoji2-1.3.0\AndroidManifest.xml:29:13-31:52
-56                android:name="androidx.emoji2.text.EmojiCompatInitializer"
-56-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\8a384624d5351cfd8bf32be8f0f22002\transformed\emoji2-1.3.0\AndroidManifest.xml:30:17-75
-57                android:value="androidx.startup" />
-57-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\8a384624d5351cfd8bf32be8f0f22002\transformed\emoji2-1.3.0\AndroidManifest.xml:31:17-49
-58            <meta-data
-58-->[androidx.lifecycle:lifecycle-process:2.8.7] C:\Users\durga\.gradle\caches\8.11.1\transforms\63c6e9e6c8053ac95f26cd8ee4ec41e2\transformed\lifecycle-process-2.8.7\AndroidManifest.xml:29:13-31:52
-59                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
-59-->[androidx.lifecycle:lifecycle-process:2.8.7] C:\Users\durga\.gradle\caches\8.11.1\transforms\63c6e9e6c8053ac95f26cd8ee4ec41e2\transformed\lifecycle-process-2.8.7\AndroidManifest.xml:30:17-78
-60                android:value="androidx.startup" />
-60-->[androidx.lifecycle:lifecycle-process:2.8.7] C:\Users\durga\.gradle\caches\8.11.1\transforms\63c6e9e6c8053ac95f26cd8ee4ec41e2\transformed\lifecycle-process-2.8.7\AndroidManifest.xml:31:17-49
-61            <meta-data
-61-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:29:13-31:52
-62                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
-62-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:30:17-85
-63                android:value="androidx.startup" />
-63-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:31:17-49
-64        </provider>
-65
-66        <activity
-66-->[androidx.compose.ui:ui-test-manifest:1.7.8] C:\Users\durga\.gradle\caches\8.11.1\transforms\e78fb5cda47fa280767a0c6c9d7a7800\transformed\ui-test-manifest-1.7.8\AndroidManifest.xml:23:9-25:39
-67            android:name="androidx.activity.ComponentActivity"
-67-->[androidx.compose.ui:ui-test-manifest:1.7.8] C:\Users\durga\.gradle\caches\8.11.1\transforms\e78fb5cda47fa280767a0c6c9d7a7800\transformed\ui-test-manifest-1.7.8\AndroidManifest.xml:24:13-63
-68            android:exported="true" />
-68-->[androidx.compose.ui:ui-test-manifest:1.7.8] C:\Users\durga\.gradle\caches\8.11.1\transforms\e78fb5cda47fa280767a0c6c9d7a7800\transformed\ui-test-manifest-1.7.8\AndroidManifest.xml:25:13-36
-69
-70        <receiver
-70-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:34:9-52:20
-71            android:name="androidx.profileinstaller.ProfileInstallReceiver"
-71-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:35:13-76
-72            android:directBootAware="false"
-72-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:36:13-44
-73            android:enabled="true"
-73-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:37:13-35
-74            android:exported="true"
-74-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:38:13-36
-75            android:permission="android.permission.DUMP" >
-75-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:39:13-57
-76            <intent-filter>
-76-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:40:13-42:29
-77                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
-77-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:41:17-91
-77-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:41:25-88
-78            </intent-filter>
-79            <intent-filter>
-79-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:43:13-45:29
-80                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
-80-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:44:17-85
-80-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:44:25-82
-81            </intent-filter>
-82            <intent-filter>
-82-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:46:13-48:29
-83                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
-83-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:47:17-88
-83-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:47:25-85
-84            </intent-filter>
-85            <intent-filter>
-85-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:49:13-51:29
-86                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
-86-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:50:17-95
-86-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\22ac6903791fa4c15cef822b8188c3a3\transformed\profileinstaller-1.4.0\AndroidManifest.xml:50:25-92
-87            </intent-filter>
-88        </receiver>
-89    </application>
-90
-91</manifest>
+33        android:testOnly="true"
+34        android:theme="@style/Theme.ExamArena"
+34-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:17:9-47
+35        android:usesCleartextTraffic="true" >
+35-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:18:9-44
+36        <activity
+36-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:19:9-29:20
+37            android:name="com.examarena.MainActivity"
+37-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:20:13-41
+38            android:exported="true"
+38-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:21:13-36
+39            android:label="@string/app_name"
+39-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:22:13-45
+40            android:theme="@style/Theme.ExamArena"
+40-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:23:13-51
+41            android:windowSoftInputMode="adjustResize" >
+41-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:24:13-55
+42            <intent-filter>
+42-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:25:13-28:29
+43                <action android:name="android.intent.action.MAIN" />
+43-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:26:17-69
+43-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:26:25-66
+44
+45                <category android:name="android.intent.category.LAUNCHER" />
+45-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:27:17-77
+45-->E:\dipak\ExamArena\frontend_app\app\src\main\AndroidManifest.xml:27:27-74
+46            </intent-filter>
+47        </activity>
+48        <activity
+48-->[androidx.compose.ui:ui-tooling-android:1.7.8] C:\Users\durga\.gradle\caches\8.11.1\transforms\1f3394b861e6c78aade935ad54636015\transformed\ui-tooling-release\AndroidManifest.xml:23:9-25:39
+49            android:name="androidx.compose.ui.tooling.PreviewActivity"
+49-->[androidx.compose.ui:ui-tooling-android:1.7.8] C:\Users\durga\.gradle\caches\8.11.1\transforms\1f3394b861e6c78aade935ad54636015\transformed\ui-tooling-release\AndroidManifest.xml:24:13-71
+50            android:exported="true" />
+50-->[androidx.compose.ui:ui-tooling-android:1.7.8] C:\Users\durga\.gradle\caches\8.11.1\transforms\1f3394b861e6c78aade935ad54636015\transformed\ui-tooling-release\AndroidManifest.xml:25:13-36
+51
+52        <provider
+52-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\3eefb9a4dff471d7102b85002013c327\transformed\emoji2-1.3.0\AndroidManifest.xml:24:9-32:20
+53            android:name="androidx.startup.InitializationProvider"
+53-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\3eefb9a4dff471d7102b85002013c327\transformed\emoji2-1.3.0\AndroidManifest.xml:25:13-67
+54            android:authorities="com.examarena.debug.androidx-startup"
+54-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\3eefb9a4dff471d7102b85002013c327\transformed\emoji2-1.3.0\AndroidManifest.xml:26:13-68
+55            android:exported="false" >
+55-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\3eefb9a4dff471d7102b85002013c327\transformed\emoji2-1.3.0\AndroidManifest.xml:27:13-37
+56            <meta-data
+56-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\3eefb9a4dff471d7102b85002013c327\transformed\emoji2-1.3.0\AndroidManifest.xml:29:13-31:52
+57                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+57-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\3eefb9a4dff471d7102b85002013c327\transformed\emoji2-1.3.0\AndroidManifest.xml:30:17-75
+58                android:value="androidx.startup" />
+58-->[androidx.emoji2:emoji2:1.3.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\3eefb9a4dff471d7102b85002013c327\transformed\emoji2-1.3.0\AndroidManifest.xml:31:17-49
+59            <meta-data
+59-->[androidx.lifecycle:lifecycle-process:2.8.7] C:\Users\durga\.gradle\caches\8.11.1\transforms\bdb1de04ae7a5903eb87b20a4aece811\transformed\lifecycle-process-2.8.7\AndroidManifest.xml:29:13-31:52
+60                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+60-->[androidx.lifecycle:lifecycle-process:2.8.7] C:\Users\durga\.gradle\caches\8.11.1\transforms\bdb1de04ae7a5903eb87b20a4aece811\transformed\lifecycle-process-2.8.7\AndroidManifest.xml:30:17-78
+61                android:value="androidx.startup" />
+61-->[androidx.lifecycle:lifecycle-process:2.8.7] C:\Users\durga\.gradle\caches\8.11.1\transforms\bdb1de04ae7a5903eb87b20a4aece811\transformed\lifecycle-process-2.8.7\AndroidManifest.xml:31:17-49
+62            <meta-data
+62-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:29:13-31:52
+63                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+63-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:30:17-85
+64                android:value="androidx.startup" />
+64-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:31:17-49
+65        </provider>
+66
+67        <activity
+67-->[androidx.compose.ui:ui-test-manifest:1.7.8] C:\Users\durga\.gradle\caches\8.11.1\transforms\e67851a8a01724246118d197af3ee754\transformed\ui-test-manifest-1.7.8\AndroidManifest.xml:23:9-25:39
+68            android:name="androidx.activity.ComponentActivity"
+68-->[androidx.compose.ui:ui-test-manifest:1.7.8] C:\Users\durga\.gradle\caches\8.11.1\transforms\e67851a8a01724246118d197af3ee754\transformed\ui-test-manifest-1.7.8\AndroidManifest.xml:24:13-63
+69            android:exported="true" />
+69-->[androidx.compose.ui:ui-test-manifest:1.7.8] C:\Users\durga\.gradle\caches\8.11.1\transforms\e67851a8a01724246118d197af3ee754\transformed\ui-test-manifest-1.7.8\AndroidManifest.xml:25:13-36
+70
+71        <receiver
+71-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:34:9-52:20
+72            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+72-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:35:13-76
+73            android:directBootAware="false"
+73-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:36:13-44
+74            android:enabled="true"
+74-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:37:13-35
+75            android:exported="true"
+75-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:38:13-36
+76            android:permission="android.permission.DUMP" >
+76-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:39:13-57
+77            <intent-filter>
+77-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:40:13-42:29
+78                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+78-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:41:17-91
+78-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:41:25-88
+79            </intent-filter>
+80            <intent-filter>
+80-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:43:13-45:29
+81                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+81-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:44:17-85
+81-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:44:25-82
+82            </intent-filter>
+83            <intent-filter>
+83-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:46:13-48:29
+84                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+84-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:47:17-88
+84-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:47:25-85
+85            </intent-filter>
+86            <intent-filter>
+86-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:49:13-51:29
+87                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+87-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:50:17-95
+87-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\durga\.gradle\caches\8.11.1\transforms\838fb1aa752e6669bd57aa8d1fdf3671\transformed\profileinstaller-1.4.0\AndroidManifest.xml:50:25-92
+88            </intent-filter>
+89        </receiver>
+90    </application>
+91
+92</manifest>

@@ -4,24 +4,7 @@
             "outputFile": "com.examarena.app-mergeDebugResources-55:/values-ar/values-ar.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\durga\\.gradle\\caches\\8.11.1\\transforms\\c7d87ade740b21b82fdd55e36ea67fee\\transformed\\foundation-release\\res\\values-ar\\values-ar.xml",
-                    "from": {
-                        "startLines": "2,3",
-                        "startColumns": "4,4",
-                        "startOffsets": "55,139",
-                        "endColumns": "83,85",
-                        "endOffsets": "134,220"
-                    },
-                    "to": {
-                        "startLines": "85,86",
-                        "startColumns": "4,4",
-                        "startOffsets": "8719,8803",
-                        "endColumns": "83,85",
-                        "endOffsets": "8798,8884"
-                    }
-                },
-                {
-                    "source": "C:\\Users\\durga\\.gradle\\caches\\8.11.1\\transforms\\d36ea428935e7beac91dcaaeeb21c93f\\transformed\\ui-release\\res\\values-ar\\values-ar.xml",
+                    "source": "C:\\Users\\durga\\.gradle\\caches\\8.11.1\\transforms\\89106d9012228fc5812acc64e4b4cad7\\transformed\\ui-release\\res\\values-ar\\values-ar.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
@@ -38,7 +21,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\durga\\.gradle\\caches\\8.11.1\\transforms\\ec80e0c2c6af66c9bd82c7b978d0b981\\transformed\\core-1.15.0\\res\\values-ar\\values-ar.xml",
+                    "source": "C:\\Users\\durga\\.gradle\\caches\\8.11.1\\transforms\\7911a1379590392d68c0c7a9925997a8\\transformed\\core-1.15.0\\res\\values-ar\\values-ar.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9",
                         "startColumns": "4,4,4,4,4,4,4,4",
@@ -55,7 +38,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\durga\\.gradle\\caches\\8.11.1\\transforms\\3dd89a3d57ba98e7982fc6f475f5f60a\\transformed\\material3-release\\res\\values-ar\\values-ar.xml",
+                    "source": "C:\\Users\\durga\\.gradle\\caches\\8.11.1\\transforms\\ef7f36fd4700478a57f5920c12092bf0\\transformed\\material3-release\\res\\values-ar\\values-ar.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
@@ -69,6 +52,23 @@
                         "startOffsets": "1454,1572,1689,1799,1915,2013,2118,2241,2378,2499,2642,2729,2834,2926,3026,3144,3270,3380,3526,3670,3807,3959,4085,4205,4328,4446,4539,4637,4760,4884,4984,5087,5195,5340,5490,5597,5699,5779,5873,5966,6083,6172,6257,6357,6436,6520,6621,6724,6823,6921,7008,7114,7214,7314,7443,7522,7623",
                         "endColumns": "117,116,109,115,97,104,122,136,120,142,86,104,91,99,117,125,109,145,143,136,151,125,119,122,117,92,97,122,123,99,102,107,144,149,106,101,79,93,92,116,88,84,99,78,83,100,102,98,97,86,105,99,99,128,78,100,92",
                         "endOffsets": "1567,1684,1794,1910,2008,2113,2236,2373,2494,2637,2724,2829,2921,3021,3139,3265,3375,3521,3665,3802,3954,4080,4200,4323,4441,4534,4632,4755,4879,4979,5082,5190,5335,5485,5592,5694,5774,5868,5961,6078,6167,6252,6352,6431,6515,6616,6719,6818,6916,7003,7109,7209,7309,7438,7517,7618,7711"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\durga\\.gradle\\caches\\8.11.1\\transforms\\ee14bba3e17c0c9edf8b8f06e01df84d\\transformed\\foundation-release\\res\\values-ar\\values-ar.xml",
+                    "from": {
+                        "startLines": "2,3",
+                        "startColumns": "4,4",
+                        "startOffsets": "55,139",
+                        "endColumns": "83,85",
+                        "endOffsets": "134,220"
+                    },
+                    "to": {
+                        "startLines": "85,86",
+                        "startColumns": "4,4",
+                        "startOffsets": "8719,8803",
+                        "endColumns": "83,85",
+                        "endOffsets": "8798,8884"
                     }
                 }
             ]

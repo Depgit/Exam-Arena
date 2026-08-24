@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: ExamArena Backend AWS Lambda SAM Deployment Template
+
+Globals:
+  Function:
+    Timeout: 15
+    MemorySize: 512
+    LoggingConfig:
+      LogFormat: JSON
+
+Resources:
+  ExamArenaRestApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: exam-arena-rest-api
+      CodeUri: .
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - arm64
+      Environment:
+        Variables:
+          DATABASE_DRIVER: postgres
+          DATABASE_URL: postgresql://exam_user:your_password@rds-instance-endpoint.rds.amazonaws.com:5432/exam_arena?sslmode=require
+          JWT_SECRET: your_production_jwt_secret_key_123
+          CORS_ALLOWED_ORIGINS: "*"
+          ENVIRONMENT: production
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+        RootApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: ANY
+
+Outputs:
+  ExamArenaApiUrl:
+    Description: API Gateway endpoint URL for ExamArena REST API
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"

@@ -1,8 +1,15 @@
-.PHONY: build run dev test docker-up docker-down clean
-
-# ── Local Development ────────────────────────────────────────────────
+# ── Local Development & Builds ────────────────────────────────────────
 build:
 	go build -o bin/exam-arena ./cmd/server
+
+build-linux-amd64:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o bin/exam-arena-linux-amd64 ./cmd/server
+
+build-linux-arm64:
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -o bin/exam-arena-linux-arm64 ./cmd/server
+
+build-lambda:
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -ldflags="-w -s" -o bin/bootstrap ./cmd/lambda
 
 run: build
 	./bin/exam-arena

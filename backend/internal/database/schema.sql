@@ -215,25 +215,28 @@ CREATE TABLE IF NOT EXISTS matchmaking_queue (
 CREATE INDEX IF NOT EXISTS idx_matchmaking_lookup ON matchmaking_queue(exam_category_id, match_type, rating);
 
 -- Seed initial exam categories
-INSERT OR IGNORE INTO exam_categories (id, code, name, description, is_active) VALUES
+INSERT INTO exam_categories (id, code, name, description, is_active) VALUES
   ('ssc-cgl', 'SSC', 'SSC CGL', 'Staff Selection Commission exams', 1),
   ('banking', 'BANK', 'Banking / IBPS', 'IBPS, SBI and other banking exams', 1),
   ('railways', 'RRB', 'Railways', 'RRB and railway recruitment exams', 1),
   ('upsc', 'UPSC', 'UPSC Prelims', 'Union Public Service Commission exams', 1),
   ('cat', 'CAT', 'CAT / MBA', 'Common Admission Test and MBA entrance exams', 1),
-  ('state-psc', 'STATE_PSC', 'State PSC', 'State Public Service Commission exams', 1);
+  ('state-psc', 'STATE_PSC', 'State PSC', 'State Public Service Commission exams', 1)
+ON CONFLICT (id) DO NOTHING;
 
 -- Seed initial topic & questions so practice and battle mode work immediately out-of-the-box!
-INSERT OR IGNORE INTO topics (id, exam_category_id, name) VALUES
+INSERT INTO topics (id, exam_category_id, name) VALUES
   ('topic-ssc-qa', 'ssc-cgl', 'Quantitative Aptitude'),
-  ('topic-ssc-gi', 'ssc-cgl', 'General Intelligence & Reasoning');
+  ('topic-ssc-gi', 'ssc-cgl', 'General Intelligence & Reasoning')
+ON CONFLICT (id) DO NOTHING;
 
-INSERT OR IGNORE INTO questions (id, exam_category_id, topic_id, question_type, difficulty, body, explanation, estimated_time_seconds, status) VALUES
+INSERT INTO questions (id, exam_category_id, topic_id, question_type, difficulty, body, explanation, estimated_time_seconds, status) VALUES
   ('q-ssc-1', 'ssc-cgl', 'topic-ssc-qa', 'mcq_single', 'easy', 'If 20% of a number is 50, then what is 40% of that number?', 'If 20% is 50, then 40% (which is double 20%) is 50 * 2 = 100.', 30, 'published'),
   ('q-ssc-2', 'ssc-cgl', 'topic-ssc-qa', 'mcq_single', 'medium', 'A train running at 72 km/h crosses a pole in 9 seconds. What is the length of the train in meters?', 'Speed = 72 * (5/18) = 20 m/s. Length = Speed * Time = 20 * 9 = 180 meters.', 45, 'published'),
-  ('q-ssc-3', 'ssc-cgl', 'topic-ssc-qa', 'mcq_single', 'hard', 'Two pipes A and B can fill a tank in 12 and 16 hours respectively. If both pipes are opened together, after how much time should pipe B be closed so that the tank is full in 9 hours?', 'A fills 1/12 per hour. In 9 hours A fills 9/12 = 3/4. Remaining 1/4 is filled by B. B rate is 1/16. Time for B = (1/4)/(1/16) = 4 hours.', 60, 'published');
+  ('q-ssc-3', 'ssc-cgl', 'topic-ssc-qa', 'mcq_single', 'hard', 'Two pipes A and B can fill a tank in 12 and 16 hours respectively. If both pipes are opened together, after how much time should pipe B be closed so that the tank is full in 9 hours?', 'A fills 1/12 per hour. In 9 hours A fills 9/12 = 3/4. Remaining 1/4 is filled by B. B rate is 1/16. Time for B = (1/4)/(1/16) = 4 hours.', 60, 'published')
+ON CONFLICT (id) DO NOTHING;
 
-INSERT OR IGNORE INTO question_options (id, question_id, option_text, is_correct, order_index) VALUES
+INSERT INTO question_options (id, question_id, option_text, is_correct, order_index) VALUES
   ('opt-1-a', 'q-ssc-1', '75', 0, 1),
   ('opt-1-b', 'q-ssc-1', '100', 1, 2),
   ('opt-1-c', 'q-ssc-1', '120', 0, 3),
@@ -245,4 +248,5 @@ INSERT OR IGNORE INTO question_options (id, question_id, option_text, is_correct
   ('opt-3-a', 'q-ssc-3', '3 hours', 0, 1),
   ('opt-3-b', 'q-ssc-3', '4 hours', 1, 2),
   ('opt-3-c', 'q-ssc-3', '4.5 hours', 0, 3),
-  ('opt-3-d', 'q-ssc-3', '6 hours', 0, 4);
+  ('opt-3-d', 'q-ssc-3', '6 hours', 0, 4)
+ON CONFLICT (id) DO NOTHING;
