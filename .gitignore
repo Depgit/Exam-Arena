@@ -1,4 +1,5 @@
-.env
 bin
-frontend/node_modules
 docs
+backend/.env
+exam-arena-frontend/.env
+.env
