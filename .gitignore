@@ -1,0 +1,4 @@
+.env
+bin
+frontend/node_modules
+docs
