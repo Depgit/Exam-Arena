@@ -36,7 +36,7 @@ export default function Friends() {
     refresh()
     getSubjects().then(({ data }) => {
       setSubjects(data)
-      if (data.length) setCategoryId(data[0].id)
+      if (data && data.length) setCategoryId(data[0].id)
     })
   }, [refresh])
 
@@ -141,11 +141,11 @@ export default function Friends() {
 
         <div className="form-card">
           <h3>Requests</h3>
-          {list.incoming.length === 0 && list.outgoing.length === 0 && (
+          {list && list.incoming.length === 0 && list.outgoing.length === 0 && (
             <p className="muted">No pending requests.</p>
           )}
           <ul className="friend-list">
-            {list.incoming.map((f) => (
+            {list && list.incoming?.map((f) => (
               <li key={f.friendship_id} className="friend-row">
                 <div className="friend-info">
                   <span className="friend-name">{nameOf(f)}</span>
@@ -161,7 +161,7 @@ export default function Friends() {
                 </div>
               </li>
             ))}
-            {list.outgoing.map((f) => (
+            {list && list.outgoing?.map((f) => (
               <li key={f.friendship_id} className="friend-row">
                 <div className="friend-info">
                   <span className="friend-name">{nameOf(f)}</span>
@@ -184,15 +184,15 @@ export default function Friends() {
           <label className="inline-label">
             Challenge in
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              {subjects.map((s) => (
+              {subjects && subjects.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
           </label>
         </div>
-        {list.friends.length === 0 && <p className="muted">No friends yet — add someone by username.</p>}
+        {list && list.friends.length === 0 && <p className="muted">No friends yet — add someone by username.</p>}
         <ul className="friend-list">
-          {list.friends.map((f) => (
+          {list && list.friends?.map((f) => (
             <li key={f.friendship_id} className="friend-row">
               <span className={`ws-dot ${f.online ? 'online' : 'offline'}`} title={f.online ? 'Online' : 'Offline'} />
               <div className="friend-info">

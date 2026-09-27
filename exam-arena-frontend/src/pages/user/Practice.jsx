@@ -96,7 +96,7 @@ export default function Practice() {
           <label>
             Exam category
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              {subjects.map((s) => (
+              {subjects && subjects.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
@@ -152,7 +152,7 @@ export default function Practice() {
         </div>
         <p className="question-body">{question.body}</p>
         <div className="options">
-          {question.options
+          {question?.options
             .slice()
             .sort((a, b) => a.order_index - b.order_index)
             .map((opt) => {
@@ -161,9 +161,8 @@ export default function Practice() {
               return (
                 <button
                   key={opt.id}
-                  className={`option-btn ${isSelected ? 'selected' : ''} ${
-                    showResult ? (feedback.is_correct ? 'correct' : 'incorrect') : ''
-                  }`}
+                  className={`option-btn ${isSelected ? 'selected' : ''} ${showResult ? (feedback.is_correct ? 'correct' : 'incorrect') : ''
+                    }`}
                   onClick={() => handleSelect(opt.id)}
                   disabled={!!feedback}
                   aria-pressed={isSelected}

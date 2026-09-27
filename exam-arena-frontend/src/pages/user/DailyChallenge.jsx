@@ -15,7 +15,7 @@ export function DailyLeaderboard({ entries, userId }) {
   if (!entries?.length) return <p className="muted">No one has finished today's challenge yet.</p>
   return (
     <ol className="lb-list daily-board">
-      {entries.map((e) => (
+      {entries?.map((e) => (
         <li key={e.user_id} className={`lb-item ${e.user_id === userId ? 'lb-me' : ''}`}>
           <span className="lb-rank">#{e.rank}</span>
           <span className="lb-name">{e.display_name || e.username}</span>
@@ -59,7 +59,7 @@ export default function DailyChallenge() {
       setCurrent(0)
     } catch (err) {
       setError(err.message)
-      loadOverview().catch(() => {})
+      loadOverview().catch(() => { })
     }
   }, [loadOverview])
 
@@ -83,7 +83,7 @@ export default function DailyChallenge() {
       const { data } = await submitDailyChallenge(answers)
       setResult(data)
       setRun(null)
-      loadOverview().catch(() => {})
+      loadOverview().catch(() => { })
     } catch (err) {
       setError(err.message)
       submittedRef.current = false
@@ -114,6 +114,9 @@ export default function DailyChallenge() {
   if (run) {
     const questions = run.questions
     const question = questions[current]
+    if (!question) {
+      return <div className="page-center">Loading next question...</div>;
+    }
     const selected = selections[question.id] || ''
     const answered = questions.filter((q) => selections[q.id]).length
     const isLast = current === questions.length - 1
@@ -138,11 +141,11 @@ export default function DailyChallenge() {
         <div className="question-card">
           <div className="question-card-head">
             <span className={`badge badge-${question.difficulty}`}>{question.difficulty}</span>
-            <FlagQuestionButton questionId={question.id} />
+            <FlagQuestionButton questionId={question && question.id} />
           </div>
           <p className="question-body">{question.body}</p>
           <div className="options">
-            {question.options
+            {question?.options
               .slice()
               .sort((a, b) => a.order_index - b.order_index)
               .map((opt) => (
@@ -178,7 +181,7 @@ export default function DailyChallenge() {
 
         <div className="match-nav">
           <div className="progress-dots">
-            {questions.map((q, i) => (
+            {questions?.map((q, i) => (
               <span
                 key={q.id}
                 className={`dot ${selections[q.id] ? 'answered' : ''} ${i === current ? 'active' : ''}`}
@@ -241,7 +244,7 @@ export default function DailyChallenge() {
           <div className="form-card">
             <h3>Your answers</h3>
             <ol className="review-list">
-              {review.map((item, i) => (
+              {review?.map((item, i) => (
                 <li key={item.question_id} className={`review-item ${item.is_correct ? 'is-correct' : 'is-wrong'}`}>
                   <div className="review-q">
                     <span className="muted">Q{i + 1}.</span> {item.body}

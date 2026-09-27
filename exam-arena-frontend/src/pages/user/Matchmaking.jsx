@@ -71,7 +71,7 @@ export default function Matchmaking() {
           <label>
             Exam category
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              {subjects.map((s) => (
+              {subjects?.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>

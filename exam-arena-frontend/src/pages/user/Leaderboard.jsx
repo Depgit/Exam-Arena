@@ -31,7 +31,7 @@ export default function Leaderboard() {
         <label>
           Exam category
           <select value={categoryCode} onChange={(e) => setCategoryCode(e.target.value)}>
-            {subjects.map((s) => (
+            {subjects?.map((s) => (
               <option key={s.id} value={s.code}>{s.name}</option>
             ))}
           </select>
@@ -47,7 +47,7 @@ export default function Leaderboard() {
           </tr>
         </thead>
         <tbody>
-          {entries.map((e) => (
+          {entries && entries.map((e) => (
             <tr key={e.user_id} className={e.user_id === user.id ? 'me' : ''}>
               <td>#{e.rank}</td>
               <td>{e.display_name || e.username}</td>

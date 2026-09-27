@@ -50,9 +50,9 @@ function DailyChallengeCard() {
         {status}
         {cta}
       </div>
-      {top.length > 0 && (
+      {top && top.length > 0 && (
         <ol className="daily-top">
-          {top.map((e) => (
+          {top?.map((e) => (
             <li key={e.user_id}>
               <span className="lb-rank">#{e.rank}</span>
               <span className="lb-name">{e.display_name || e.username}</span>
@@ -84,7 +84,7 @@ export default function Dashboard() {
         setSubjects(subs)
         setStats(st ?? [])
         // Load leaderboard for the first available subject
-        if (subs.length > 0) {
+        if (subs && subs.length > 0) {
           setLbCategory(subs[0])
           const { data: lb } = await getLeaderboard(subs[0].code, { limit: 10 })
           setLeaderboard(lb ?? [])
@@ -141,7 +141,7 @@ export default function Dashboard() {
 
           <h2>Exam categories</h2>
           <div className="chip-row">
-            {subjects.map((s) => (
+            {subjects?.map((s) => (
               <span key={s.id} className="chip" title={s.description}>
                 {s.name}
               </span>
@@ -173,7 +173,7 @@ export default function Dashboard() {
                 <Link to="/app/leaderboard" className="lb-see-all">See all →</Link>
               )}
             </div>
-            {subjects.length > 1 && (
+            {subjects && subjects.length > 1 && (
               <div className="lb-tabs">
                 {subjects.slice(0, 4).map((s) => (
                   <button
@@ -187,7 +187,7 @@ export default function Dashboard() {
               </div>
             )}
             <ol className="lb-list">
-              {leaderboard.map((entry, idx) => {
+              {leaderboard?.map((entry, idx) => {
                 const isMe = entry.user_id === user.id
                 const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null
                 return (
@@ -204,7 +204,7 @@ export default function Dashboard() {
                   </li>
                 )
               })}
-              {leaderboard.length === 0 && (
+              {leaderboard && leaderboard.length === 0 && (
                 <li className="lb-empty muted">No players yet</li>
               )}
             </ol>

@@ -92,7 +92,7 @@ export default function FriendNotifications() {
           <button className="btn-ghost small" onClick={() => setError('')}>Dismiss</button>
         </div>
       )}
-      {challenges.map((ch) => (
+      {challenges && challenges.map((ch) => (
         <div key={ch.match_id} className="toast toast-challenge">
           <div className="toast-body">
             <strong>{ch.from_username}</strong> challenged you
@@ -104,7 +104,7 @@ export default function FriendNotifications() {
           </div>
         </div>
       ))}
-      {notices.map((n) => (
+      {notices && notices.map((n) => (
         <div key={n.id} className="toast">
           <span>{n.text}</span>
         </div>

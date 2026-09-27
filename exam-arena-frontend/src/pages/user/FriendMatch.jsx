@@ -15,7 +15,7 @@ export default function FriendMatch() {
   useEffect(() => {
     getSubjects().then(({ data }) => {
       setSubjects(data)
-      if (data.length) setCategoryId(data[0].id)
+      if (data && data.length) setCategoryId(data[0].id)
     })
   }, [])
 
@@ -64,7 +64,7 @@ export default function FriendMatch() {
           <label>
             Exam category
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              {subjects.map((s) => (
+              {subjects && subjects.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>

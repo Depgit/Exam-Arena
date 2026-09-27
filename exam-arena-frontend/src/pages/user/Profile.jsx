@@ -36,7 +36,7 @@ export default function Profile() {
 
       <h2>Ratings</h2>
       <div className="stats-grid">
-        {profile.ratings.map((r) => (
+        {profile && profile.ratings?.map((r) => (
           <div key={r.exam_category_id} className="stat-card">
             <CategoryHead name={r.exam_category_name} code={r.exam_category_code} />
             <div className="stat-row"><span>Rating</span><strong>{r.rating}</strong></div>
@@ -48,7 +48,7 @@ export default function Profile() {
 
       <h2>Career statistics</h2>
       <div className="stats-grid">
-        {stats.map((s) => (
+        {stats && stats.map((s) => (
           <div key={s.exam_category_id} className="stat-card">
             <CategoryHead name={s.exam_category_name} code={s.exam_category_code} />
             <div className="stat-row"><span>Total matches</span><strong>{s.total_matches}</strong></div>
@@ -58,7 +58,7 @@ export default function Profile() {
             <div className="stat-row"><span>Questions solved</span><strong>{s.total_questions_solved}</strong></div>
           </div>
         ))}
-        {stats.length === 0 && <p className="muted">No matches played yet.</p>}
+        {stats && stats.length === 0 && <p className="muted">No matches played yet.</p>}
       </div>
     </div>
   )

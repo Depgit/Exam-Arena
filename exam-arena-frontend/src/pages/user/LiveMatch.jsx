@@ -30,7 +30,7 @@ export default function LiveMatch() {
   // If we arrived here without router state (e.g. page refresh), hydrate
   // from the REST endpoint instead. Completed matches show final results.
   useEffect(() => {
-    if (questions.length > 0) return
+    if (questions && questions.length > 0) return
     getMatch(matchId)
       .then(({ data }) => {
         if (data.questions) setQuestions(data.questions)
@@ -165,7 +165,7 @@ export default function LiveMatch() {
         </div>
 
         <div className="results-list">
-          {sorted.map((r) => {
+          {sorted?.map((r) => {
             const isMe = r.user_id === user.id
             const delta = r.elo_delta ?? 0
             const deltaSign = delta > 0 ? '+' : ''
@@ -257,19 +257,19 @@ export default function LiveMatch() {
 
       <div className="scoreboard">
         {players.length > 0
-          ? players.map((p) => {
-              const live = scoreboard.find((s) => s.user_id === p.user_id)
-              return (
-                <div key={p.user_id} className={`score-pill ${p.user_id === user.id ? 'me' : ''}`}>
-                  {p.username}: {live?.score ?? 0}
-                </div>
-              )
-            })
-          : scoreboard.map((s) => (
-              <div key={s.user_id} className={`score-pill ${s.user_id === user.id ? 'me' : ''}`}>
-                {s.username}: {s.score}
+          ? players?.map((p) => {
+            const live = scoreboard.find((s) => s.user_id === p.user_id)
+            return (
+              <div key={p.user_id} className={`score-pill ${p.user_id === user.id ? 'me' : ''}`}>
+                {p.username}: {live?.score ?? 0}
               </div>
-            ))}
+            )
+          })
+          : scoreboard?.map((s) => (
+            <div key={s.user_id} className={`score-pill ${s.user_id === user.id ? 'me' : ''}`}>
+              {s.username}: {s.score}
+            </div>
+          ))}
       </div>
 
       <div className="question-card">

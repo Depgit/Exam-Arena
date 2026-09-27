@@ -29,7 +29,7 @@ export default function Navbar() {
     <nav className="navbar">
       <div className="navbar-brand">Exam Arena{isAdmin ? ' · Admin' : ''}</div>
       <div className="navbar-links">
-        {links.map(([to, label]) => (
+        {links && links.map(([to, label]) => (
           <NavLink key={to} to={to} className={({ isActive }) => (isActive ? 'active' : '')}>
             {label}
           </NavLink>

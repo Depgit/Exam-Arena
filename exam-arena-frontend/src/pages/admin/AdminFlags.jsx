@@ -52,7 +52,7 @@ export default function AdminFlags() {
         <label className="inline-label">
           Show
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            {STATUSES.map((s) => (
+            {STATUSES && STATUSES.map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
@@ -78,7 +78,7 @@ export default function AdminFlags() {
 
             <p className="question-body">{q.body}</p>
             <ol className="flag-options">
-              {q.options.map((o) => (
+              {q.options && q.options.map((o) => (
                 <li key={o.id} className={o.is_correct ? 'is-correct' : ''}>
                   {o.option_text} {o.is_correct && <strong>✓ marked correct</strong>}
                 </li>
@@ -93,7 +93,7 @@ export default function AdminFlags() {
             </div>
 
             <ul className="flag-reports">
-              {q.flags.map((f) => (
+              {q.flags && q.flags.map((f) => (
                 <li key={f.id}>
                   <strong>{f.reporter_username}</strong>
                   <span className="muted"> · {REASON_LABELS[f.reason] || f.reason} · {new Date(f.created_at).toLocaleString()} · {f.status}</span>

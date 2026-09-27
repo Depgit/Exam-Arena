@@ -33,7 +33,7 @@ export default function CreateQuestion() {
     getSubjects()
       .then(({ data }) => {
         setSubjects(data)
-        if (data.length) setCategoryId(data[0].id)
+        if (data && data.length) setCategoryId(data[0].id)
       })
       .catch((err) => setError(err.message))
   }, [])
@@ -112,11 +112,11 @@ export default function CreateQuestion() {
       return
     }
     const cleanOptions = options.filter((o) => o.option_text.trim() !== '')
-    if (cleanOptions.length < 2) {
+    if (cleanOptions && cleanOptions.length < 2) {
       setError('At least 2 non-empty options are required.')
       return
     }
-    if (!cleanOptions.some((o) => o.is_correct)) {
+    if (cleanOptions && !cleanOptions.some((o) => o.is_correct)) {
       setError('Mark at least one option as correct.')
       return
     }
@@ -187,7 +187,7 @@ export default function CreateQuestion() {
           <label>
             Exam category
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} required>
-              {subjects.map((s) => (
+              {subjects?.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
@@ -206,7 +206,7 @@ export default function CreateQuestion() {
                   {topicsLoading ? 'Loading topics…' : 'No topics yet — add one below'}
                 </option>
               )}
-              {topics.map((t) => (
+              {topics?.map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
@@ -265,7 +265,7 @@ export default function CreateQuestion() {
           </label>
 
           <h3>Options</h3>
-          {options.map((opt, i) => (
+          {options && options.map((opt, i) => (
             <div className="option-editor-row" key={i}>
               <input
                 type={questionType === 'mcq_multiple' ? 'checkbox' : 'radio'}
@@ -279,7 +279,7 @@ export default function CreateQuestion() {
                 onChange={(e) => updateOption(i, { option_text: e.target.value })}
                 placeholder={`Option ${i + 1}`}
               />
-              {options.length > 2 && (
+              {options && options.length > 2 && (
                 <button type="button" className="btn-ghost small" onClick={() => removeOption(i)}>✕</button>
               )}
             </div>
