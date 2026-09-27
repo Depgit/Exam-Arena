@@ -200,7 +200,7 @@ func main() {
 	mux.HandleFunc("PUT /api/v1/admin/flags/{questionId}", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", flagHandler.ReviewFlags)))
 
 	// WebSocket
-	mux.HandleFunc("GET /ws", wsHandler.HandleConnection)
+	mux.HandleFunc("GET /wss", wsHandler.HandleConnection)
 
 	// ── Debug (local only) ─────────────────────────────────────────────────
 	mux.HandleFunc("GET /debug/state", func(w http.ResponseWriter, r *http.Request) {
