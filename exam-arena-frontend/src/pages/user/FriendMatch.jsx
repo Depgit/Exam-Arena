@@ -23,6 +23,12 @@ export default function FriendMatch() {
     navigate(`/app/match/${payload.match_id}`, { state: payload })
   })
 
+  useWSListener('match_failed', (payload) => {
+    setError(payload.reason || 'Match could not start — please try again.')
+    setRoomCode('')
+    setWaitingRoom(null)
+  })
+
   async function handleCreate() {
     setError('')
     try {

@@ -35,7 +35,7 @@ export default function Navbar() {
       </div>
       <div className="navbar-right">
         <span className={`ws-dot ${connected ? 'online' : 'offline'}`} title={connected ? 'Connected' : 'Disconnected'} />
-        <span className="navbar-user">{user?.username}</span>
+        <NavLink to="/app/profile" className="navbar-user" title="View your profile">{user?.username}</NavLink>
         <button
           className="btn-ghost"
           onClick={() => {

@@ -482,6 +482,15 @@ func (s *MatchService) endMatch(ctx context.Context, lm *LiveMatch) {
 	}
 
 	// ── Elo calculation (2-player only) ──────────────────────────────
+	// Compute ELO synchronously so we can include rating changes in the
+	// match_end payload that gets sent to players immediately.
+	type eloResult struct {
+		ratingBefore int
+		ratingAfter  int
+		delta        int
+	}
+	eloMap := make(map[string]eloResult, len(results))
+
 	if len(results) == 2 {
 		a, b := results[0], results[1]
 
@@ -503,6 +512,9 @@ func (s *MatchService) endMatch(ctx context.Context, lm *LiveMatch) {
 			deltaA := newRA - ratingA.Rating
 			deltaB := newRB - ratingB.Rating
 
+			eloMap[a.userID] = eloResult{ratingBefore: ratingA.Rating, ratingAfter: newRA, delta: deltaA}
+			eloMap[b.userID] = eloResult{ratingBefore: ratingB.Rating, ratingAfter: newRB, delta: deltaB}
+
 			// Persist asynchronously — final results were already sent to players
 			go func() {
 				bgCtx := context.Background()
@@ -522,13 +534,17 @@ func (s *MatchService) endMatch(ctx context.Context, lm *LiveMatch) {
 	// ── Send match_end to all players ────────────────────────────────
 	playerResults := make([]map[string]interface{}, len(results))
 	for i, r := range results {
+		elo := eloMap[r.userID]
 		playerResults[i] = map[string]interface{}{
-			"user_id":  r.userID,
-			"username": r.username,
-			"score":    r.score,
-			"rank":     i + 1,
-			"correct":  r.correct,
-			"total":    r.total,
+			"user_id":       r.userID,
+			"username":      r.username,
+			"score":         r.score,
+			"rank":          i + 1,
+			"correct":       r.correct,
+			"total":         r.total,
+			"rating_before": elo.ratingBefore,
+			"rating_after":  elo.ratingAfter,
+			"elo_delta":     elo.delta,
 		}
 	}
 
