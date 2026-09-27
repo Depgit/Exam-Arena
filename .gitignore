@@ -3,3 +3,4 @@ docs
 backend/.env
 exam-arena-frontend/.env
 .env
+question_bank.json

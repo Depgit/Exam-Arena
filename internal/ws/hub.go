@@ -3,6 +3,7 @@ package ws
 import (
 	"encoding/json"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 )
 
@@ -37,21 +38,23 @@ func (h *Hub) Run() {
 			h.mu.Lock()
 			// Close existing connection for this user (single session)
 			if existing, ok := h.clients[client.userID]; ok {
-				close(existing.send)
+				existing.closeSend()
 				delete(h.clients, client.userID)
 			}
 			h.clients[client.userID] = client
+			total := len(h.clients)
 			h.mu.Unlock()
-			slog.Info("client connected", "user_id", client.userID, "total", len(h.clients))
+			slog.Info("client connected", "user_id", client.userID, "total", total)
 
 		case client := <-h.unregister:
 			h.mu.Lock()
 			if existing, ok := h.clients[client.userID]; ok && existing == client {
 				delete(h.clients, client.userID)
-				close(client.send)
+				client.closeSend()
 			}
+			total := len(h.clients)
 			h.mu.Unlock()
-			slog.Info("client disconnected", "user_id", client.userID, "total", len(h.clients))
+			slog.Info("client disconnected", "user_id", client.userID, "total", total)
 
 		case msg := <-h.incoming:
 			h.handleMessage(msg)
@@ -59,7 +62,7 @@ func (h *Hub) Run() {
 		case <-h.done:
 			h.mu.Lock()
 			for id, client := range h.clients {
-				close(client.send)
+				client.closeSend()
 				delete(h.clients, id)
 			}
 			h.mu.Unlock()
@@ -72,11 +75,29 @@ func (h *Hub) Register(client *Client) {
 	h.register <- client
 }
 
+// RegisterHandler must be called before Run starts consuming messages.
 func (h *Hub) RegisterHandler(msgType string, handler MessageHandler) {
 	h.handlers[msgType] = handler
 }
 
+// handleMessage dispatches one inbound frame. It runs on the hub goroutine,
+// which has no HTTP recovery middleware above it, so a panic inside a handler
+// is recovered here — one malformed message must not take the server down.
 func (h *Hub) handleMessage(msg *IncomingMessage) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("panic in websocket handler",
+				"error", r,
+				"user_id", msg.Client.userID,
+				"stack", string(debug.Stack()),
+			)
+			msg.Client.SendJSON(Message{
+				Type:    "error",
+				Payload: map[string]interface{}{"message": "internal server error"},
+			})
+		}
+	}()
+
 	var parsed struct {
 		Type    string          `json:"type"`
 		Payload json.RawMessage `json:"payload"`
@@ -114,10 +135,7 @@ func (h *Hub) Broadcast(msg Message) {
 	defer h.mu.RUnlock()
 
 	for _, client := range h.clients {
-		select {
-		case client.send <- data:
-		default:
-		}
+		client.enqueue(data)
 	}
 }
 

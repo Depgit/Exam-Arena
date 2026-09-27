@@ -47,6 +47,7 @@ func main() {
 	userRepo := repository.NewUserRepo(db)
 	matchRepo := repository.NewMatchRepo(db)
 	questionRepo := repository.NewQuestionRepo(db)
+	topicRepo := repository.NewTopicRepo(db)
 
 	memCache := appCache.NewMemoryCache()
 
@@ -67,7 +68,6 @@ func main() {
 	questionBank.StartAutoRefresh(bgCtx, questionRepo.GetActiveCategoryIDs)
 
 	hub := ws.NewHub()
-	go hub.Run()
 
 	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.JWTExpiryHours)
 
@@ -99,8 +99,13 @@ func main() {
 	practiceHandler := handler.NewPracticeHandler(practiceService)
 	leaderboardHandler := handler.NewLeaderboardHandler(leaderboardService)
 	subjectHandler := handler.NewSubjectHandler(questionRepo)
+	topicHandler := handler.NewTopicHandler(topicRepo)
 	adminHandler := handler.NewAdminHandler(questionRepo, userRepo, matchRepo)
 	wsHandler := handler.NewWSHandler(hub, cfg.JWTSecret, matchService)
+
+	// Start the hub only after every message handler is registered so the
+	// handler map is never written while the hub goroutine reads it.
+	go hub.Run()
 
 	// ── Router (same as before) ───────────────────────────────────────
 	mux := http.NewServeMux()
@@ -130,6 +135,11 @@ func main() {
 
 	// Subjects
 	mux.HandleFunc("GET /api/v1/subjects", middleware.Auth(cfg.JWTSecret, subjectHandler.GetAllSubjects))
+	mux.HandleFunc("GET /api/v1/subjects/{id}/topics", middleware.Auth(cfg.JWTSecret, topicHandler.ListTopics))
+
+	// Topics
+	mux.HandleFunc("GET /api/v1/topics", middleware.Auth(cfg.JWTSecret, topicHandler.ListTopics))
+	mux.HandleFunc("GET /api/v1/topics/{id}", middleware.Auth(cfg.JWTSecret, topicHandler.GetTopic))
 
 	// Practice
 	mux.HandleFunc("POST /api/v1/practice/start", middleware.Auth(cfg.JWTSecret, practiceHandler.StartSession))
@@ -141,6 +151,7 @@ func main() {
 	mux.HandleFunc("GET /api/v1/leaderboard/{category}", leaderboardHandler.GetLeaderboard)
 
 	// Admin
+	mux.HandleFunc("POST /api/v1/admin/topics", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", topicHandler.CreateTopic)))
 	mux.HandleFunc("POST /api/v1/admin/questions", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", adminHandler.CreateQuestion)))
 	mux.HandleFunc("PUT /api/v1/admin/questions/{id}/publish", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", adminHandler.PublishQuestion)))
 	mux.HandleFunc("GET /api/v1/admin/stats", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", adminHandler.GetSystemStats)))

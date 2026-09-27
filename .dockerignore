@@ -1,0 +1,13 @@
+# Both images are built with the repository root as context. Keep the
+# context small: no git history, docs, local binaries, secrets or the
+# frontend's node_modules (the frontend image runs its own npm ci).
+.git
+.gitignore
+.env
+bin/
+docs/
+*.md
+scripts/
+exam-arena-frontend/node_modules
+exam-arena-frontend/dist
+exam-arena-frontend/.env

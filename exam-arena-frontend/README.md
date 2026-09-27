@@ -37,8 +37,18 @@ VITE_API_BASE_URL=http://localhost:8080
 VITE_WS_BASE_URL=ws://localhost:8080
 ```
 
+## Docker
+
+From the repository root, `make docker-up` builds and starts Postgres, the Go API on `http://localhost:8080` and this UI on `http://localhost:3000` (`docker/Dockerfile.frontend`: Vite build → nginx with SPA fallback).
+
+Vite bakes `VITE_*` values into the bundle at build time, so they are compose build args rather than runtime env. They default to `localhost:8080`; override them when the browser reaches the API somewhere else:
+
+```bash
+VITE_API_BASE_URL=http://192.168.1.10:8080 VITE_WS_BASE_URL=ws://192.168.1.10:8080 make docker-up
+```
+
 ## Notes / things to wire up as your backend evolves
 
-- **Admin question creation** requires a `topic_id` UUID per the API doc, but no "list topics" endpoint exists yet — the form takes it as a free-text UUID field. Once a `/api/v1/topics` (or similar) endpoint exists, swap that input for a `<select>`.
+- **Topics**: the Create Question form loads the selected category's topics from `GET /api/v1/topics?exam_category_id=…` into a dropdown, and admins can add a missing topic inline (`POST /api/v1/admin/topics`) without leaving the form.
 - `GET /api/v1/users/{id}/matches` is documented as a stub, so match history isn't wired into the Profile page yet.
 - Admin accounts aren't created via the register form (the API doesn't expose a role field there) — seed/promote admin users on the backend, then just log in with those credentials here.

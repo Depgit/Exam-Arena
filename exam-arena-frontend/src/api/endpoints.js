@@ -13,6 +13,12 @@ export const getUserMatchHistory = (id) => api.get(`/api/v1/users/${id}/matches`
 // ---- Subjects ----
 export const getSubjects = () => api.get('/api/v1/subjects')
 
+// ---- Topics ----
+// Pass a category id to get only that category's topics (the usual case).
+export const getTopics = (categoryId) =>
+  api.get('/api/v1/topics', { params: categoryId ? { exam_category_id: categoryId } : undefined })
+export const getTopic = (id) => api.get(`/api/v1/topics/${id}`)
+
 // ---- Matchmaking ----
 export const joinQueue = (body) => api.post('/api/v1/matches/queue', body)
 export const leaveQueue = () => api.delete('/api/v1/matches/queue')
@@ -34,6 +40,7 @@ export const getLeaderboard = (categoryCode, params) =>
   api.get(`/api/v1/leaderboard/${categoryCode}`, { params })
 
 // ---- Admin ----
+export const createTopic = (body) => api.post('/api/v1/admin/topics', body)
 export const createQuestion = (body) => api.post('/api/v1/admin/questions', body)
 export const publishQuestion = (id) => api.put(`/api/v1/admin/questions/${id}/publish`)
 export const getAdminStats = () => api.get('/api/v1/admin/stats')

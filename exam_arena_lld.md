@@ -83,7 +83,8 @@ cmd/server/main
     │       ├── MatchRepo
     │       ├── QuestionRepo
     │       ├── PracticeRepo
-    │       └── LeaderboardRepo
+    │       ├── LeaderboardRepo
+    │       └── TopicRepo
     ├── internal/cache
     │       ├── Cache (interface)
     │       ├── MemoryCache
@@ -109,6 +110,7 @@ cmd/server/main
     │       ├── PracticeHandler   → PracticeService
     │       ├── LeaderboardHandler→ LeaderboardService
     │       ├── SubjectHandler    → QuestionRepo
+    │       ├── TopicHandler      → TopicRepo
     │       ├── AdminHandler      → QuestionRepo, UserRepo, MatchRepo
     │       └── WSHandler         → ws.Hub, AuthService, MatchService
     ├── internal/middleware
@@ -325,8 +327,9 @@ type ExamCategory struct {
 
 type Topic struct {
     ID, ExamCategoryID string
-    ParentTopicID *string
+    ParentTopicID *string   // nil for a top-level topic
     Name string
+    CreatedAt time.Time
 }
 ```
 
@@ -435,6 +438,17 @@ type PracticeSession struct {
 |--------|-------|
 | `GetLeaderboard(ctx, catID, limit, offset)` | JOIN `user_ratings` + `users`, uses `ROW_NUMBER() OVER (ORDER BY rating DESC)` window function |
 | `GetCategoryByCode(ctx, code)` | Lookup by short code (e.g. `"upsc"`) |
+
+### 4.6 TopicRepo (`internal/repository/topic_repo.go`)
+
+| Method | Notes |
+|--------|-------|
+| `Create(ctx, *Topic)` | `INSERT INTO topics … RETURNING …`; FK failure (unknown category/parent) surfaces via `repository.IsForeignKeyViolation` |
+| `GetByID(ctx, id)` | Returns `nil, nil` when missing |
+| `ExistsByName(ctx, catID, name)` | Case-insensitive uniqueness check within a category |
+| `List(ctx, catID)` | All topics, or one category's when `catID != ""`; ordered by name; never returns a nil slice |
+
+`internal/repository/errors.go` adds `IsForeignKeyViolation`, `IsUniqueViolation` and `IsInvalidInput`, which map `pgconn.PgError` codes so handlers can answer 400/409 instead of 500.
 
 ---
 
@@ -623,6 +637,7 @@ type LiveMatch struct {
     StartedAt    time.Time
     TimerSeconds int
     cancelTimer  context.CancelFunc             // cancels the timer goroutine
+    mu           sync.RWMutex                   // guards every LivePlayer's Score / AnsweredIDs
 }
 
 type LivePlayer struct {
@@ -643,7 +658,7 @@ Called by Engine's callback. Runs in its own goroutine.
 1. questionBank.GetRandom(categoryID, 10)  ← zero DB calls
 2. matchRepo.CreateMatch(...)              ← persist skeleton
 3. matchRepo.AddMatchQuestions(...)        ← batch insert question IDs
-4. for each player: matchRepo.AddPlayer(...)
+4. for each player: matchRepo.AddPlayer(...) + matchRepo.RemoveFromQueue(...)  ← clears the Postgres queue mirror so RestoreFromDB cannot re-queue matched players after a restart
 5. matchRepo.UpdateMatchStatus("in_progress")
 6. Build LiveMatch, store in cache (35 min TTL)
 7. toPlayerQuestions(questions)            ← strip IsCorrect
@@ -664,7 +679,7 @@ Called from WebSocket handler, synchronous.
    - Correct: 100 base
    + 50 if timeTakenMs < 10_000
    + 25 if timeTakenMs < 30_000
-6. Update player.Score and player.AnsweredIDs in memory
+6. lm.recordAnswer(...) — updates player.Score / AnsweredIDs under the LiveMatch write lock (returns duplicate/finished flags)
 7. go { matchRepo.SaveAnswer(...); matchRepo.UpdatePlayerScore(...) }  ← async persist
 8. hub.SendToUser(all players, "score_update" with full scoreboard)
 9. if lm.allAnswered() → lm.cancelTimer(); go endMatch(lm)
@@ -675,7 +690,7 @@ Called from WebSocket handler, synchronous.
 ```
 1. cache.DeleteIfPresent("live_match:<id>") → if false, another goroutine already ended it → return
 2. matchRepo.UpdateMatchStatus("completed")
-3. Sort players by score descending
+3. lm.snapshotResults() — copies every player's state under the read lock, sorted by score descending (endMatch never touches live LivePlayer structs afterwards)
 4. if 2-player match:
    a. userRepo.GetRating(each player, categoryID)
    b. utils.CalculateElo(ratingA, ratingB, scoreA)  ← scoreA = 1.0/0.5/0.0
@@ -808,6 +823,8 @@ type Client struct {
     send     chan []byte  // buffered(256) — outbound message queue
     userID   string
     username string
+    mu       sync.Mutex   // guards closed + every send on the channel
+    closed   bool         // set once by closeSend(); later sends are dropped, never panic
 }
 ```
 
@@ -823,7 +840,7 @@ maxMessageSize = 4096 bytes
 
 **WritePump** (goroutine): Drains `client.send` channel and writes to WebSocket. Sends periodic pings. Closes connection on channel close.
 
-**SendJSON**: Marshals `Message` to JSON, non-blocking send to `client.send`; drops message if buffer full (logged as warning).
+**SendJSON**: Marshals `Message` to JSON, non-blocking send to `client.send`; drops message if buffer full (logged as warning). Once the hub has closed the client via `closeSend()`, sends are dropped silently — so a late `SendToUser` from a match timer, `endMatch` or the matchmaking engine can never hit "send on closed channel" (a panic outside the HTTP Recovery middleware would kill the process).
 
 ### 8.3 Hub (`internal/ws/hub.go`)
 
@@ -855,7 +872,7 @@ select:
 - `Broadcast(msg)` — RLock, marshal once, send to all clients' channels
 - `IsOnline(userID)` / `OnlineCount()` — RLock queries
 
-**Single-session enforcement:** When a new connection for an already-connected `userID` arrives, the old client's `send` channel is closed (causing its WritePump to exit and disconnect the WebSocket).
+**Single-session enforcement:** When a new connection for an already-connected `userID` arrives, the old client's `send` channel is closed through `Client.closeSend()` — mutex-guarded and once-only — causing its WritePump to exit and disconnect the WebSocket while concurrent senders observe `closed` instead of panicking. `handleMessage` also recovers panics raised by message handlers, because the hub goroutine sits outside the HTTP Recovery middleware.
 
 ### 8.4 GameRoom (`internal/ws/game_room.go`)
 
@@ -922,6 +939,17 @@ type GameRoom struct {
 | Route | Method | Handler | Auth |
 |-------|--------|---------|------|
 | `/api/v1/subjects` | GET | `GetAllSubjects` | JWT |
+
+### 9.6.1 TopicHandler
+
+| Route | Method | Handler | Auth |
+|-------|--------|---------|------|
+| `/api/v1/topics` | GET | `ListTopics` (`?exam_category_id=` filter) | JWT |
+| `/api/v1/subjects/{id}/topics` | GET | `ListTopics` (category from path) | JWT |
+| `/api/v1/topics/{id}` | GET | `GetTopic` | JWT |
+| `/api/v1/admin/topics` | POST | `CreateTopic` | JWT + Role=admin |
+
+`CreateTopic` trims and validates `name` (1–100 chars), requires a UUID `exam_category_id`, rejects duplicate names within a category (409) and, when `parent_topic_id` is set, requires the parent to exist in the same category.
 
 ### 9.7 AdminHandler
 
@@ -1022,21 +1050,23 @@ const (
 ```
 1. Load config (env vars via config.Load())
 2. Connect to PostgreSQL (pgxpool with min/max conns)
-3. Run database migrations
+3. Run database migrations — embedded `migrations/*.sql` (via `migrations.FS`) applied in version order, each in its own transaction, tracked in `schema_migrations`
 4. Initialise repositories (UserRepo, MatchRepo, QuestionRepo)
 5. Create MemoryCache
 6. Create QuestionBank
 7. Warm QuestionBank with all active categories (blocks until done)
 8. Start QuestionBank auto-refresh goroutine (every 15 min)
-9. Start ws.Hub goroutine
+9. Create ws.Hub (not started yet)
 10. Initialise services (Auth, Match, Matchmaking, Practice, Leaderboard)
 11. Create matchmaking Queue and Engine
 12. RestoreFromDB — reload queue entries from Postgres
 13. Start Engine goroutine (ticks every 2s)
-14. Register all HTTP handlers and routes
-15. Apply middleware chain
-16. Start HTTP server
-17. Wait for SIGINT/SIGTERM
+14. Construct handlers (WSHandler registers its message handlers on the hub)
+15. Start ws.Hub goroutine — only now, so the handler map is never written while the hub reads it
+16. Register all HTTP routes
+17. Apply middleware chain
+18. Start HTTP server
+19. Wait for SIGINT/SIGTERM
 ```
 
 **Graceful shutdown:**
@@ -1144,6 +1174,8 @@ POST /practice/{id}/end → EndSession (DB UPDATE status=completed)
 | `cache.MemoryCache.items` | `sync.RWMutex` |
 | `cache.QuestionBank.bank` | `sync.RWMutex` |
 | `ws.GameRoom.Scores` | `sync.RWMutex` (not currently used in main flow) |
+| `service.LiveMatch` player scores/answers | `sync.RWMutex` — hub goroutine writes via `recordAnswer`; `GetMatchDetails`, the timer and `endMatch` read snapshots (`scoreBoard`, `snapshotResults`) |
+| `ws.Client.send` | `sync.Mutex` + `closed` flag — `closeSend` closes once; `enqueue` drops instead of panicking afterwards |
 
 ### Critical invariant: Double-end prevention
 
@@ -1228,11 +1260,15 @@ Elo updates are persisted **asynchronously** after `match_end` is sent to player
 | POST | `/api/v1/matches/friend` | JWT | `matchHandler.CreateFriendMatch` |
 | POST | `/api/v1/matches/friend/join` | JWT | `matchHandler.JoinFriendMatch` |
 | GET | `/api/v1/subjects` | JWT | `subjectHandler.GetAllSubjects` |
+| GET | `/api/v1/subjects/{id}/topics` | JWT | `topicHandler.ListTopics` |
+| GET | `/api/v1/topics` | JWT | `topicHandler.ListTopics` |
+| GET | `/api/v1/topics/{id}` | JWT | `topicHandler.GetTopic` |
 | POST | `/api/v1/practice/start` | JWT | `practiceHandler.StartSession` |
 | POST | `/api/v1/practice/{id}/answer` | JWT | `practiceHandler.SubmitAnswer` |
 | POST | `/api/v1/practice/{id}/end` | JWT | `practiceHandler.EndSession` |
 | GET | `/api/v1/practice/{id}` | JWT | `practiceHandler.GetSession` |
 | GET | `/api/v1/leaderboard/{category}` | None | `leaderboardHandler.GetLeaderboard` |
+| POST | `/api/v1/admin/topics` | JWT + admin | `topicHandler.CreateTopic` |
 | POST | `/api/v1/admin/questions` | JWT + admin | `adminHandler.CreateQuestion` |
 | PUT | `/api/v1/admin/questions/{id}/publish` | JWT + admin | `adminHandler.PublishQuestion` |
 | GET | `/api/v1/admin/stats` | JWT + admin | `adminHandler.GetSystemStats` |

@@ -1,12 +1,23 @@
 import { useEffect, useState } from 'react'
-import { getSubjects, createQuestion, publishQuestion } from '../../api/endpoints'
+import {
+  getSubjects,
+  getTopics,
+  createTopic,
+  createQuestion,
+  publishQuestion,
+} from '../../api/endpoints'
 
 const emptyOption = () => ({ option_text: '', is_correct: false })
 
 export default function CreateQuestion() {
   const [subjects, setSubjects] = useState([])
   const [categoryId, setCategoryId] = useState('')
+  const [topics, setTopics] = useState([])
+  const [topicsLoading, setTopicsLoading] = useState(false)
   const [topicId, setTopicId] = useState('')
+  const [newTopicName, setNewTopicName] = useState('')
+  const [creatingTopic, setCreatingTopic] = useState(false)
+  const [topicNotice, setTopicNotice] = useState('')
   const [questionType, setQuestionType] = useState('mcq_single')
   const [difficulty, setDifficulty] = useState('medium')
   const [body, setBody] = useState('')
@@ -19,11 +30,56 @@ export default function CreateQuestion() {
   const [published, setPublished] = useState(false)
 
   useEffect(() => {
-    getSubjects().then(({ data }) => {
-      setSubjects(data)
-      if (data.length) setCategoryId(data[0].id)
-    })
+    getSubjects()
+      .then(({ data }) => {
+        setSubjects(data)
+        if (data.length) setCategoryId(data[0].id)
+      })
+      .catch((err) => setError(err.message))
   }, [])
+
+  // Every question belongs to one topic of its exam category, so reload the
+  // topic list whenever the category changes.
+  useEffect(() => {
+    if (!categoryId) return
+    let cancelled = false
+    setTopicsLoading(true)
+    setTopicNotice('')
+    getTopics(categoryId)
+      .then(({ data }) => {
+        if (cancelled) return
+        const list = data ?? []
+        setTopics(list)
+        setTopicId(list[0]?.id ?? '')
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setTopicsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [categoryId])
+
+  async function handleCreateTopic() {
+    const name = newTopicName.trim()
+    if (!name || !categoryId || creatingTopic) return
+    setCreatingTopic(true)
+    setError('')
+    try {
+      const { data } = await createTopic({ exam_category_id: categoryId, name })
+      setTopics((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
+      setTopicId(data.id)
+      setNewTopicName('')
+      setTopicNotice(`Topic "${data.name}" added and selected.`)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setCreatingTopic(false)
+    }
+  }
 
   function updateOption(index, patch) {
     setOptions((prev) => prev.map((o, i) => (i === index ? { ...o, ...patch } : o)))
@@ -51,6 +107,10 @@ export default function CreateQuestion() {
     setCreated(null)
     setPublished(false)
 
+    if (!topicId) {
+      setError('Pick a topic, or add one first.')
+      return
+    }
     const cleanOptions = options.filter((o) => o.option_text.trim() !== '')
     if (cleanOptions.length < 2) {
       setError('At least 2 non-empty options are required.')
@@ -99,6 +159,8 @@ export default function CreateQuestion() {
     setOptions([emptyOption(), emptyOption(), emptyOption(), emptyOption()])
   }
 
+  const selectedTopic = topics.find((t) => t.id === topicId)
+
   return (
     <div className="page">
       <h1>Create Question</h1>
@@ -108,6 +170,7 @@ export default function CreateQuestion() {
         <div className="form-card">
           <div className="alert-success">Question created (status: draft).</div>
           <p className="question-body">{created.body}</p>
+          {selectedTopic && <p className="muted">Topic: {selectedTopic.name}</p>}
           {!published ? (
             <button className="btn-primary" onClick={handlePublish} disabled={publishing}>
               {publishing ? 'Publishing…' : 'Publish now'}
@@ -129,15 +192,49 @@ export default function CreateQuestion() {
               ))}
             </select>
           </label>
+
           <label>
-            Topic ID (UUID)
-            <input
+            Topic
+            <select
               value={topicId}
               onChange={(e) => setTopicId(e.target.value)}
-              placeholder="e.g. topic-uuid — no topics-listing endpoint exists yet"
+              disabled={topicsLoading || topics.length === 0}
               required
-            />
+            >
+              {topics.length === 0 && (
+                <option value="">
+                  {topicsLoading ? 'Loading topics…' : 'No topics yet — add one below'}
+                </option>
+              )}
+              {topics.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
           </label>
+          <div className="option-editor-row">
+            <input
+              value={newTopicName}
+              onChange={(e) => setNewTopicName(e.target.value)}
+              placeholder="New topic name (e.g. Number Series)"
+              maxLength={100}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleCreateTopic()
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="btn-ghost small"
+              onClick={handleCreateTopic}
+              disabled={creatingTopic || !newTopicName.trim() || !categoryId}
+            >
+              {creatingTopic ? 'Adding…' : '+ Add topic'}
+            </button>
+          </div>
+          {topicNotice && <p className="muted">{topicNotice}</p>}
+
           <label>
             Question type
             <select value={questionType} onChange={(e) => setQuestionType(e.target.value)}>

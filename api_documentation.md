@@ -13,6 +13,7 @@
    - [Auth](#41-auth)
    - [Users](#42-users)
    - [Subjects / Categories](#43-subjects--categories)
+   - [Topics](#431-topics)
    - [Matchmaking (Queue)](#44-matchmaking-queue)
    - [Matches](#45-matches)
    - [Friend Matches](#46-friend-matches)
@@ -405,6 +406,88 @@ Get all active exam categories (subjects) available for matchmaking and practice
 
 ---
 
+### 4.3.1 Topics
+
+Topics are the sub-divisions of an exam category (e.g. **SSC → Number Series**). Every question belongs to exactly one topic, so an admin needs a topic's UUID before creating a question, and practice sessions can optionally be scoped to a topic.
+
+#### `GET /api/v1/topics` 🔒
+
+List topics. Pass `exam_category_id` to get one category's topics (the usual case); omit it to list every topic across categories.
+
+**Query Parameters:**
+| Param | Type | Required | Description |
+|---|---|---|---|
+| `exam_category_id` | `UUID` | ❌ | Only return this category's topics |
+
+**Success Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "topic-uuid-1",
+      "exam_category_id": "cat-uuid-ssc",
+      "parent_topic_id": null,
+      "name": "Analogy",
+      "created_at": "2026-09-09T15:00:00Z"
+    },
+    {
+      "id": "topic-uuid-2",
+      "exam_category_id": "cat-uuid-ssc",
+      "parent_topic_id": null,
+      "name": "Number Series",
+      "created_at": "2026-09-09T15:00:00Z"
+    }
+  ],
+  "meta": {
+    "count": 2,
+    "exam_category_id": "cat-uuid-ssc"
+  }
+}
+```
+
+> [!NOTE]
+> `data` is `[]` (never `null`) when the category has no topics yet. Topics are sorted by name.
+
+**Error Responses:**
+| Status | Error |
+|---|---|
+| `400` | `"exam_category_id must be a UUID"` |
+
+---
+
+#### `GET /api/v1/subjects/{id}/topics` 🔒
+
+Subject-scoped alias: returns exactly what `GET /api/v1/topics?exam_category_id={id}` returns.
+
+---
+
+#### `GET /api/v1/topics/{id}` 🔒
+
+Get a single topic.
+
+**Success Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "id": "topic-uuid-2",
+    "exam_category_id": "cat-uuid-ssc",
+    "parent_topic_id": null,
+    "name": "Number Series",
+    "created_at": "2026-09-09T15:00:00Z"
+  }
+}
+```
+
+**Error Responses:**
+| Status | Error |
+|---|---|
+| `400` | `"topic id must be a UUID"` |
+| `404` | `"topic not found"` |
+
+---
+
 ### 4.4 Matchmaking (Queue)
 
 #### `POST /api/v1/matches/queue` 🔒
@@ -607,11 +690,14 @@ Join an existing friend match room. When the second player joins, the match star
   "success": true,
   "data": {
     "match_id": "match-uuid",
-    "status": "in_progress",
+    "status": "waiting",
     "message": "match is starting — listen on your WebSocket connection"
   }
 }
 ```
+
+> [!NOTE]
+> `status` is the room's state at the moment of joining (`waiting`). The match is started asynchronously right after this response: both players receive `match_start` over WebSocket within a few hundred milliseconds, and `GET /api/v1/matches/{id}` then reports `in_progress`.
 
 **Error Responses:**
 | Status | Error |
@@ -803,6 +889,49 @@ Get the leaderboard for an exam category. **Does not require authentication.**
 
 ### 4.9 Admin (Requires `admin` role)
 
+#### `POST /api/v1/admin/topics` 🔒👑
+
+Create a topic inside an exam category. Do this before creating questions for a new topic — `POST /api/v1/admin/questions` needs the returned `id` as its `topic_id`.
+
+**Request Body:**
+```json
+{
+  "exam_category_id": "cat-uuid-ssc",
+  "name": "Number Series",
+  "parent_topic_id": null
+}
+```
+
+| Field | Type | Required | Default |
+|---|---|---|---|
+| `exam_category_id` | `UUID` | ✅ | — |
+| `name` | `string` | ✅ | — (1–100 chars, trimmed; unique per category, case-insensitive) |
+| `parent_topic_id` | `UUID \| null` | ❌ | `null` — set it to nest a sub-topic under an existing topic of the **same** category |
+
+**Success Response:** `201 Created`
+```json
+{
+  "success": true,
+  "data": {
+    "id": "topic-uuid-2",
+    "exam_category_id": "cat-uuid-ssc",
+    "parent_topic_id": null,
+    "name": "Number Series",
+    "created_at": "2026-09-09T15:00:00Z"
+  }
+}
+```
+
+**Error Responses:**
+| Status | Error |
+|---|---|
+| `400` | `"exam_category_id is required"` / `"name is required"` / `"name must be at most 100 characters"` |
+| `400` | `"exam category not found"` |
+| `400` | `"parent topic not found"` / `"parent topic belongs to a different exam category"` |
+| `409` | `"a topic with this name already exists in this category"` |
+
+---
+
 #### `POST /api/v1/admin/questions` 🔒👑
 
 Create a new question (status: `draft`).
@@ -836,6 +965,9 @@ Create a new question (status: `draft`).
 | `explanation` | `string \| null` | ❌ | `null` |
 | `estimated_time_seconds` | `int` | ❌ | `60` |
 | `options` | `array` | ✅ | — (min 2) |
+
+> [!TIP]
+> Get valid `topic_id` values from `GET /api/v1/topics?exam_category_id=…`, or create one with `POST /api/v1/admin/topics`. A `topic_id` or `exam_category_id` that does not exist returns `400 "exam_category_id or topic_id does not exist"`.
 
 **Question Types:** `mcq_single`, `mcq_multiple`, `integer`
 
@@ -1235,6 +1367,18 @@ interface ExamCategory {
 }
 ```
 
+### Topic
+
+```typescript
+interface Topic {
+  id: string;                     // UUID — pass as topic_id when creating a question
+  exam_category_id: string;       // the owning ExamCategory
+  parent_topic_id: string | null; // set for sub-topics
+  name: string;
+  created_at: string;             // ISO 8601
+}
+```
+
 ### Match
 
 ```typescript
@@ -1469,6 +1613,9 @@ sequenceDiagram
 | `GET` | `/api/v1/users/{id}/stats` | ❌ | Get user statistics |
 | `GET` | `/api/v1/users/{id}/matches` | ❌ | Get match history (stub) |
 | `GET` | `/api/v1/subjects` | 🔒 | List exam categories |
+| `GET` | `/api/v1/subjects/{id}/topics` | 🔒 | List a subject's topics |
+| `GET` | `/api/v1/topics` | 🔒 | List topics (filter by `exam_category_id`) |
+| `GET` | `/api/v1/topics/{id}` | 🔒 | Get one topic |
 | `POST` | `/api/v1/matches/queue` | 🔒 | Join matchmaking queue |
 | `DELETE` | `/api/v1/matches/queue` | 🔒 | Leave matchmaking queue |
 | `GET` | `/api/v1/matches/queue/stats` | 🔒 | Queue depth per pool |
@@ -1480,6 +1627,7 @@ sequenceDiagram
 | `POST` | `/api/v1/practice/{id}/end` | 🔒 | End practice session |
 | `GET` | `/api/v1/practice/{id}` | 🔒 | Get practice session |
 | `GET` | `/api/v1/leaderboard/{category}` | ❌ | Leaderboard by category code |
+| `POST` | `/api/v1/admin/topics` | 🔒👑 | Create topic |
 | `POST` | `/api/v1/admin/questions` | 🔒👑 | Create question |
 | `PUT` | `/api/v1/admin/questions/{id}/publish` | 🔒👑 | Publish question |
 | `GET` | `/api/v1/admin/stats` | 🔒👑 | System statistics |

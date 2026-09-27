@@ -21,8 +21,14 @@ export default function Matchmaking() {
 
   useEffect(() => {
     if (!queued) return
+    let count = 0;
     const interval = setInterval(() => {
-      getQueueStats().then(({ data }) => setQueueStats(data.pools)).catch(() => {})
+      getQueueStats().then(({ data }) => setQueueStats(data.pools)).catch(() => { })
+      count++;
+      if (count > 5) {
+        clearInterval(interval);
+        handleLeave();
+      }
     }, 2000)
     return () => clearInterval(interval)
   }, [queued])

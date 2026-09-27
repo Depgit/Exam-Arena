@@ -51,8 +51,9 @@ type ExamCategory struct {
 }
 
 type Topic struct {
-	ID             string  `json:"id"`
-	ExamCategoryID string  `json:"exam_category_id"`
-	ParentTopicID  *string `json:"parent_topic_id"`
-	Name           string  `json:"name"`
+	ID             string    `json:"id"`
+	ExamCategoryID string    `json:"exam_category_id"`
+	ParentTopicID  *string   `json:"parent_topic_id"`
+	Name           string    `json:"name"`
+	CreatedAt      time.Time `json:"created_at"`
 }

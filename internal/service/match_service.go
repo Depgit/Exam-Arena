@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"sort"
+	"sync"
 	"time"
 
 	appCache "github.com/exam-arena/internal/cache"
@@ -34,11 +35,18 @@ type LiveMatch struct {
 	MatchID      string
 	CategoryID   string
 	MatchType    string
-	Questions    []models.Question      // full objects including correct answers
-	PlayerStates map[string]*LivePlayer // userID → state
+	Questions    []models.Question      // full objects including correct answers; immutable after creation
+	PlayerStates map[string]*LivePlayer // userID → state; key set is fixed at creation, values change under mu
 	StartedAt    time.Time
 	TimerSeconds int
 	cancelTimer  context.CancelFunc
+
+	// mu guards every LivePlayer's Score and AnsweredIDs. The hub goroutine
+	// mutates them in SubmitAnswer while HTTP handlers (GetMatchDetails),
+	// the match timer and endMatch read them concurrently. An unsynchronised
+	// map read+write is a fatal runtime error in Go — it cannot be recovered
+	// and takes the whole server down.
+	mu sync.RWMutex
 }
 
 type LivePlayer struct {
@@ -48,7 +56,36 @@ type LivePlayer struct {
 	AnsweredIDs map[string]bool // questionID → answered (bool = correct)
 }
 
-func (lm *LiveMatch) allAnswered() bool {
+// answerOutcome is what recordAnswer reports back to SubmitAnswer.
+type answerOutcome struct {
+	score     int  // the player's score after this answer
+	finished  bool // every player has now answered every question
+	duplicate bool // this question was already answered; nothing changed
+}
+
+// recordAnswer applies one answer atomically under the write lock.
+// ok is false when userID is not a player in this match.
+func (lm *LiveMatch) recordAnswer(userID, questionID string, isCorrect bool, points int) (outcome answerOutcome, ok bool) {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+
+	player, exists := lm.PlayerStates[userID]
+	if !exists {
+		return answerOutcome{}, false
+	}
+	// Idempotent: ignore duplicate answers for the same question.
+	if _, already := player.AnsweredIDs[questionID]; already {
+		return answerOutcome{score: player.Score, duplicate: true}, true
+	}
+
+	player.Score += points
+	player.AnsweredIDs[questionID] = isCorrect
+
+	return answerOutcome{score: player.Score, finished: lm.allAnsweredLocked()}, true
+}
+
+// allAnsweredLocked reports whether the match is complete. Caller holds mu.
+func (lm *LiveMatch) allAnsweredLocked() bool {
 	for _, p := range lm.PlayerStates {
 		if len(p.AnsweredIDs) < len(lm.Questions) {
 			return false
@@ -57,8 +94,36 @@ func (lm *LiveMatch) allAnswered() bool {
 	return true
 }
 
-func (lm *LiveMatch) scoreBoard() []map[string]interface{} {
-	var board []map[string]interface{}
+// playerIDs returns every participant's user ID.
+func (lm *LiveMatch) playerIDs() []string {
+	lm.mu.RLock()
+	defer lm.mu.RUnlock()
+
+	ids := make([]string, 0, len(lm.PlayerStates))
+	for id := range lm.PlayerStates {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// playerResult is an immutable snapshot of one player's standing.
+type playerResult struct {
+	userID   string
+	username string
+	score    int
+	answered int
+	correct  int
+	total    int
+}
+
+// snapshotResults copies every player's state under the read lock and
+// returns the copies sorted by score, highest first. Callers work on the
+// snapshot, never on the live LivePlayer structs.
+func (lm *LiveMatch) snapshotResults() []playerResult {
+	lm.mu.RLock()
+	defer lm.mu.RUnlock()
+
+	results := make([]playerResult, 0, len(lm.PlayerStates))
 	for _, p := range lm.PlayerStates {
 		correct := 0
 		for _, isCorrect := range p.AnsweredIDs {
@@ -66,17 +131,34 @@ func (lm *LiveMatch) scoreBoard() []map[string]interface{} {
 				correct++
 			}
 		}
-		board = append(board, map[string]interface{}{
-			"user_id":            p.UserID,
-			"username":           p.Username,
-			"score":              p.Score,
-			"questions_answered": len(p.AnsweredIDs),
-			"correct":            correct,
+		results = append(results, playerResult{
+			userID:   p.UserID,
+			username: p.Username,
+			score:    p.Score,
+			answered: len(p.AnsweredIDs),
+			correct:  correct,
+			total:    len(lm.Questions),
 		})
 	}
-	sort.Slice(board, func(i, j int) bool {
-		return board[i]["score"].(int) > board[j]["score"].(int)
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].score > results[j].score
 	})
+	return results
+}
+
+// scoreBoard returns a sorted snapshot of every player's live score.
+func (lm *LiveMatch) scoreBoard() []map[string]interface{} {
+	results := lm.snapshotResults()
+	board := make([]map[string]interface{}, len(results))
+	for i, r := range results {
+		board[i] = map[string]interface{}{
+			"user_id":            r.userID,
+			"username":           r.username,
+			"score":              r.score,
+			"questions_answered": r.answered,
+			"correct":            r.correct,
+		}
+	}
 	return board
 }
 
@@ -164,6 +246,12 @@ func (s *MatchService) StartMatchForPair(ctx context.Context, pair matchmaking.P
 		if _, err := s.matchRepo.AddPlayer(ctx, match.ID, p.UserID, &ratingBefore); err != nil {
 			slog.Error("failed to add player to match", "error", err, "user", p.UserID)
 		}
+		// The engine claimed both players from the in-memory queue; drop the
+		// Postgres mirror rows too, otherwise RestoreFromDB re-queues them
+		// after a restart and throws them into a match they never asked for.
+		if err := s.matchRepo.RemoveFromQueue(ctx, p.UserID); err != nil {
+			slog.Warn("failed to clear queue mirror", "error", err, "user", p.UserID)
+		}
 	}
 
 	// Mark match as in_progress
@@ -241,18 +329,9 @@ func (s *MatchService) SubmitAnswer(ctx context.Context, req AnswerRequest) erro
 	}
 	lm := raw.(*LiveMatch)
 
-	player, exists := lm.PlayerStates[req.UserID]
-	if !exists {
-		return fmt.Errorf("user %s is not a player in match %s", req.UserID, req.MatchID)
-	}
-
-	// Idempotent: ignore duplicate answers for the same question
-	if _, alreadyAnswered := player.AnsweredIDs[req.QuestionID]; alreadyAnswered {
-		return nil
-	}
-
-	// ── Find the question and check correctness in memory ────────────
+	// ── Check correctness in memory ───────────────────────────────────
 	// No DB call — the correct answer is already in the LiveMatch struct.
+	// lm.Questions never changes after creation, so no lock is needed.
 	isCorrect := false
 	if req.OptionID != "" {
 		isCorrect = s.isCorrectOption(lm.Questions, req.QuestionID, req.OptionID)
@@ -269,12 +348,20 @@ func (s *MatchService) SubmitAnswer(ctx context.Context, req AnswerRequest) erro
 			pointsEarned += TimeBonusHalf
 		}
 	}
-	player.Score += pointsEarned
-	player.AnsweredIDs[req.QuestionID] = isCorrect
+
+	// ── Apply the answer under the match lock ─────────────────────────
+	outcome, isPlayer := lm.recordAnswer(req.UserID, req.QuestionID, isCorrect, pointsEarned)
+	if !isPlayer {
+		return fmt.Errorf("user %s is not a player in match %s", req.UserID, req.MatchID)
+	}
+	if outcome.duplicate {
+		return nil
+	}
 
 	// ── Persist answer to Postgres asynchronously ────────────────────
 	// The match result does NOT depend on this write completing — the
 	// LiveMatch in cache is the source of truth until the match ends.
+	// outcome.score is a plain copy, so the goroutine touches no shared state.
 	go func() {
 		ans := &models.MatchAnswer{
 			MatchID:     req.MatchID,
@@ -289,7 +376,7 @@ func (s *MatchService) SubmitAnswer(ctx context.Context, req AnswerRequest) erro
 		if err := s.matchRepo.SaveAnswer(context.Background(), ans); err != nil {
 			slog.Error("failed to persist answer", "error", err)
 		}
-		if err := s.matchRepo.UpdatePlayerScore(context.Background(), req.MatchID, req.UserID, player.Score); err != nil {
+		if err := s.matchRepo.UpdatePlayerScore(context.Background(), req.MatchID, req.UserID, outcome.score); err != nil {
 			slog.Error("failed to update player score", "error", err)
 		}
 	}()
@@ -298,7 +385,7 @@ func (s *MatchService) SubmitAnswer(ctx context.Context, req AnswerRequest) erro
 	s.broadcastScoreUpdate(lm, req.UserID, req.QuestionID, isCorrect, pointsEarned)
 
 	// ── Check if match is over ─────────────────────────────────────────
-	if lm.allAnswered() {
+	if outcome.finished {
 		lm.cancelTimer() // stop the timer goroutine
 		go s.endMatch(context.Background(), lm)
 	}
@@ -387,43 +474,26 @@ func (s *MatchService) endMatch(ctx context.Context, lm *LiveMatch) {
 		slog.Error("failed to mark match completed", "error", err)
 	}
 
-	// ── Build ranked results ──────────────────────────────────────────
-	type result struct {
-		player  *LivePlayer
-		correct int
-		total   int
+	// ── Build ranked results (immutable snapshot taken under the lock) ─
+	results := lm.snapshotResults()
+	if len(results) == 0 {
+		slog.Error("match ended with no players", "match_id", lm.MatchID)
+		return
 	}
-	var results []result
-	for _, p := range lm.PlayerStates {
-		correct := 0
-		for _, isCorrect := range p.AnsweredIDs {
-			if isCorrect {
-				correct++
-			}
-		}
-		results = append(results, result{
-			player:  p,
-			correct: correct,
-			total:   len(lm.Questions),
-		})
-	}
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].player.Score > results[j].player.Score
-	})
 
 	// ── Elo calculation (2-player only) ──────────────────────────────
 	if len(results) == 2 {
 		a, b := results[0], results[1]
 
-		ratingA, _ := s.userRepo.GetRating(ctx, a.player.UserID, lm.CategoryID)
-		ratingB, _ := s.userRepo.GetRating(ctx, b.player.UserID, lm.CategoryID)
+		ratingA, _ := s.userRepo.GetRating(ctx, a.userID, lm.CategoryID)
+		ratingB, _ := s.userRepo.GetRating(ctx, b.userID, lm.CategoryID)
 
 		if ratingA != nil && ratingB != nil {
 			var scoreA float64
 			switch {
-			case a.player.Score > b.player.Score:
+			case a.score > b.score:
 				scoreA = 1.0
-			case a.player.Score == b.player.Score:
+			case a.score == b.score:
 				scoreA = 0.5
 			default:
 				scoreA = 0.0
@@ -436,20 +506,16 @@ func (s *MatchService) endMatch(ctx context.Context, lm *LiveMatch) {
 			// Persist asynchronously — final results were already sent to players
 			go func() {
 				bgCtx := context.Background()
-				s.userRepo.UpdateRating(bgCtx, a.player.UserID, lm.CategoryID, newRA, ratingA.MatchesPlayed+1)
-				s.userRepo.UpdateRating(bgCtx, b.player.UserID, lm.CategoryID, newRB, ratingB.MatchesPlayed+1)
-				s.userRepo.InsertRatingHistory(bgCtx, a.player.UserID, lm.CategoryID, lm.MatchID, ratingA.Rating, newRA, deltaA)
-				s.userRepo.InsertRatingHistory(bgCtx, b.player.UserID, lm.CategoryID, lm.MatchID, ratingB.Rating, newRB, deltaB)
-				s.matchRepo.UpdatePlayerRating(bgCtx, lm.MatchID, a.player.UserID, newRA, deltaA, 1)
-				s.matchRepo.UpdatePlayerRating(bgCtx, lm.MatchID, b.player.UserID, newRB, deltaB, 2)
-				s.userRepo.UpdateStatistics(bgCtx, a.player.UserID, lm.CategoryID, scoreA >= 0.5, a.correct, a.total)
-				s.userRepo.UpdateStatistics(bgCtx, b.player.UserID, lm.CategoryID, scoreA < 0.5, b.correct, b.total)
+				s.userRepo.UpdateRating(bgCtx, a.userID, lm.CategoryID, newRA, ratingA.MatchesPlayed+1)
+				s.userRepo.UpdateRating(bgCtx, b.userID, lm.CategoryID, newRB, ratingB.MatchesPlayed+1)
+				s.userRepo.InsertRatingHistory(bgCtx, a.userID, lm.CategoryID, lm.MatchID, ratingA.Rating, newRA, deltaA)
+				s.userRepo.InsertRatingHistory(bgCtx, b.userID, lm.CategoryID, lm.MatchID, ratingB.Rating, newRB, deltaB)
+				s.matchRepo.UpdatePlayerRating(bgCtx, lm.MatchID, a.userID, newRA, deltaA, 1)
+				s.matchRepo.UpdatePlayerRating(bgCtx, lm.MatchID, b.userID, newRB, deltaB, 2)
+				s.userRepo.UpdateStatistics(bgCtx, a.userID, lm.CategoryID, scoreA >= 0.5, a.correct, a.total)
+				s.userRepo.UpdateStatistics(bgCtx, b.userID, lm.CategoryID, scoreA < 0.5, b.correct, b.total)
 				s.cache.DeletePrefix("leaderboard:")
 			}()
-
-			// Attach deltas to results for the WS message
-			_ = deltaA
-			_ = deltaB
 		}
 	}
 
@@ -457,9 +523,9 @@ func (s *MatchService) endMatch(ctx context.Context, lm *LiveMatch) {
 	playerResults := make([]map[string]interface{}, len(results))
 	for i, r := range results {
 		playerResults[i] = map[string]interface{}{
-			"user_id":  r.player.UserID,
-			"username": r.player.Username,
-			"score":    r.player.Score,
+			"user_id":  r.userID,
+			"username": r.username,
+			"score":    r.score,
 			"rank":     i + 1,
 			"correct":  r.correct,
 			"total":    r.total,
@@ -473,16 +539,15 @@ func (s *MatchService) endMatch(ctx context.Context, lm *LiveMatch) {
 			"results":  playerResults,
 		},
 	}
-	for _, p := range lm.PlayerStates {
-		s.hub.SendToUser(p.UserID, endMsg)
+	for _, r := range results {
+		s.hub.SendToUser(r.userID, endMsg)
 	}
 
-	slog.Info("match ended",
-		"match_id", lm.MatchID,
-		"winner", results[0].player.Username,
-		"score_a", results[0].player.Score,
-		"score_b", results[1].player.Score,
-	)
+	logArgs := []interface{}{"match_id", lm.MatchID, "winner", results[0].username, "score_a", results[0].score}
+	if len(results) > 1 {
+		logArgs = append(logArgs, "score_b", results[1].score)
+	}
+	slog.Info("match ended", logArgs...)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -499,8 +564,8 @@ func (s *MatchService) broadcastScoreUpdate(lm *LiveMatch, answererID, questionI
 			"scoreboard":    lm.scoreBoard(),
 		},
 	}
-	for _, p := range lm.PlayerStates {
-		s.hub.SendToUser(p.UserID, msg)
+	for _, id := range lm.playerIDs() {
+		s.hub.SendToUser(id, msg)
 	}
 }
 

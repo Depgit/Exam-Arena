@@ -32,19 +32,19 @@ export default function Dashboard() {
 
       <div className="card-grid">
         <Link to="/app/matchmaking" className="action-card">
-          <h3>Ranked Match</h3>
+          <h3>⚔️ Ranked Match</h3>
           <p>Queue up and get paired with a similarly-rated opponent.</p>
         </Link>
         <Link to="/app/friend" className="action-card">
-          <h3>Friend Match</h3>
+          <h3>👥 Friend Match</h3>
           <p>Create or join a private room with a room code.</p>
         </Link>
         <Link to="/app/practice" className="action-card">
-          <h3>Practice</h3>
+          <h3>🎯 Practice</h3>
           <p>Solve questions solo with instant feedback. No rating impact.</p>
         </Link>
         <Link to="/app/leaderboard" className="action-card">
-          <h3>Leaderboard</h3>
+          <h3>🏆 Leaderboard</h3>
           <p>See how you stack up by exam category.</p>
         </Link>
       </div>

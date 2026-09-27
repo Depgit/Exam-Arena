@@ -83,7 +83,14 @@ func (h *AdminHandler) CreateQuestion(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.questionRepo.Create(r.Context(), q, options)
 	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, "failed to create question")
+		switch {
+		case repository.IsForeignKeyViolation(err):
+			utils.JSONError(w, http.StatusBadRequest, "exam_category_id or topic_id does not exist")
+		case repository.IsInvalidInput(err):
+			utils.JSONError(w, http.StatusBadRequest, "invalid field value (check UUIDs, question_type and difficulty)")
+		default:
+			utils.JSONError(w, http.StatusInternalServerError, "failed to create question")
+		}
 		return
 	}
 
