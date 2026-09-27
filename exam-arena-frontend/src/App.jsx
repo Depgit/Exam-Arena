@@ -14,10 +14,13 @@ import LiveMatch from './pages/user/LiveMatch'
 import Practice from './pages/user/Practice'
 import Leaderboard from './pages/user/Leaderboard'
 import Profile from './pages/user/Profile'
+import Friends from './pages/user/Friends'
+import DailyChallenge from './pages/user/DailyChallenge'
 
 import AdminDashboard from './pages/admin/AdminDashboard'
 import CreateQuestion from './pages/admin/CreateQuestion'
 import AdminStats from './pages/admin/AdminStats'
+import AdminFlags from './pages/admin/AdminFlags'
 
 function RootRedirect() {
   const { isAuthenticated, isAdmin, loading } = useAuth()
@@ -45,6 +48,8 @@ export default function App() {
                 <Route path="/app/practice" element={<Practice />} />
                 <Route path="/app/leaderboard" element={<Leaderboard />} />
                 <Route path="/app/profile" element={<Profile />} />
+                <Route path="/app/friends" element={<Friends />} />
+                <Route path="/app/daily" element={<DailyChallenge />} />
               </Route>
             </Route>
 
@@ -53,6 +58,7 @@ export default function App() {
                 <Route path="/admin/dashboard" element={<AdminDashboard />} />
                 <Route path="/admin/questions/new" element={<CreateQuestion />} />
                 <Route path="/admin/stats" element={<AdminStats />} />
+                <Route path="/admin/flags" element={<AdminFlags />} />
               </Route>
             </Route>
 

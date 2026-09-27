@@ -2,6 +2,15 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { getUserProfile, getUserStats } from '../../api/endpoints'
 
+function CategoryHead({ name, code }) {
+  return (
+    <div className="stat-card-head">
+      <h3>{name || 'Unknown category'}</h3>
+      {code && <span className="category-badge">{code}</span>}
+    </div>
+  )
+}
+
 export default function Profile() {
   const { user } = useAuth()
   const [profile, setProfile] = useState(null)
@@ -11,8 +20,8 @@ export default function Profile() {
   useEffect(() => {
     Promise.all([getUserProfile(user.id), getUserStats(user.id)])
       .then(([p, s]) => {
-        setProfile(p.data)
-        setStats(s.data)
+        setProfile({ ...p.data, ratings: p.data.ratings ?? [] })
+        setStats(s.data ?? [])
       })
       .catch((err) => setError(err.message))
   }, [user.id])
@@ -29,6 +38,7 @@ export default function Profile() {
       <div className="stats-grid">
         {profile.ratings.map((r) => (
           <div key={r.exam_category_id} className="stat-card">
+            <CategoryHead name={r.exam_category_name} code={r.exam_category_code} />
             <div className="stat-row"><span>Rating</span><strong>{r.rating}</strong></div>
             <div className="stat-row"><span>Matches played</span><strong>{r.matches_played}</strong></div>
           </div>
@@ -40,6 +50,7 @@ export default function Profile() {
       <div className="stats-grid">
         {stats.map((s) => (
           <div key={s.exam_category_id} className="stat-card">
+            <CategoryHead name={s.exam_category_name} code={s.exam_category_code} />
             <div className="stat-row"><span>Total matches</span><strong>{s.total_matches}</strong></div>
             <div className="stat-row"><span>W / L / D</span><strong>{s.wins} / {s.losses} / {s.draws}</strong></div>
             <div className="stat-row"><span>Accuracy</span><strong>{s.overall_accuracy.toFixed(1)}%</strong></div>
@@ -47,6 +58,7 @@ export default function Profile() {
             <div className="stat-row"><span>Questions solved</span><strong>{s.total_questions_solved}</strong></div>
           </div>
         ))}
+        {stats.length === 0 && <p className="muted">No matches played yet.</p>}
       </div>
     </div>
   )

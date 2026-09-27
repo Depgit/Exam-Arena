@@ -48,6 +48,18 @@ func (qb *QuestionBank) Warm(ctx context.Context, categoryIDs []string) {
 	qb.mu.Unlock()
 }
 
+// RefreshCategory reloads one category, leaving the others untouched.
+func (qb *QuestionBank) RefreshCategory(ctx context.Context, categoryID string) error {
+	questions, err := qb.loader(ctx, categoryID)
+	if err != nil {
+		return err
+	}
+	qb.mu.Lock()
+	qb.bank[categoryID] = questions
+	qb.mu.Unlock()
+	return nil
+}
+
 func (qb *QuestionBank) StartAutoRefresh(ctx context.Context, listCategories CategoryLister) {
 	go func() {
 		ticker := time.NewTicker(qb.RefreshInterval)

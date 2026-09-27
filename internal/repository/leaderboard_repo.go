@@ -31,7 +31,7 @@ func (r *LeaderboardRepo) GetLeaderboard(ctx context.Context, categoryID string,
 	}
 	defer rows.Close()
 
-	var entries []models.LeaderboardEntry
+	entries := []models.LeaderboardEntry{}
 	for rows.Next() {
 		var e models.LeaderboardEntry
 		if err := rows.Scan(

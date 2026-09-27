@@ -48,6 +48,7 @@ type ExamCategory struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	IsActive    bool   `json:"is_active"`
+	SortOrder   int    `json:"sort_order"`
 }
 
 type Topic struct {

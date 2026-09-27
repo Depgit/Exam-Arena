@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"math"
+	"sort"
 	"time"
 )
 
@@ -91,8 +92,17 @@ func (e *Engine) processPool(ctx context.Context, pool []Entry) {
 	remaining := make([]Entry, len(pool))
 	copy(remaining, pool)
 
+	// Every entry in a pool shares its match type.
+	openToAll := pool[0].MatchType == MatchTypeArena
+
 	for len(remaining) >= 2 {
-		a, b, found := e.findBestPair(remaining)
+		var a, b Entry
+		var found bool
+		if openToAll {
+			a, b, found = longestWaitingPair(remaining)
+		} else {
+			a, b, found = e.findBestPair(remaining)
+		}
 		if !found {
 			break
 		}
@@ -129,6 +139,21 @@ func (e *Engine) processPool(ctx context.Context, pool []Entry) {
 		// loop never blocks on DB/WS work.
 		go e.onMatchFound(ctx, pair)
 	}
+}
+
+// MatchTypeArena is open to everyone: players are paired regardless of
+// rating, longest-waiting first.
+const MatchTypeArena = "arena"
+
+// longestWaitingPair returns the two players who have waited longest.
+func longestWaitingPair(pool []Entry) (Entry, Entry, bool) {
+	if len(pool) < 2 {
+		return Entry{}, Entry{}, false
+	}
+	sorted := make([]Entry, len(pool))
+	copy(sorted, pool)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].QueuedAt.Before(sorted[j].QueuedAt) })
+	return sorted[0], sorted[1], true
 }
 
 // findBestPair scans all O(n²) pairs and returns the one with the smallest

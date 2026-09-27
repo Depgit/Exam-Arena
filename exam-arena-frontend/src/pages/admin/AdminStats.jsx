@@ -21,6 +21,12 @@ export default function AdminStats() {
             <div className="stat-row"><span>Users</span><strong>{stats.users}</strong></div>
           </div>
           <div className="stat-card">
+            <div className="stat-row"><span>Live now</span><strong>{stats.live_users}</strong></div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-row"><span>Active users (24h)</span><strong>{stats.active_users_24h}</strong></div>
+          </div>
+          <div className="stat-card">
             <div className="stat-row"><span>Questions</span><strong>{stats.questions}</strong></div>
           </div>
           <div className="stat-card">

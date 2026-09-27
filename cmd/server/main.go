@@ -68,6 +68,15 @@ func main() {
 	questionBank.StartAutoRefresh(bgCtx, questionRepo.GetActiveCategoryIDs)
 
 	hub := ws.NewHub()
+	// Record activity on connect and disconnect for the admin "active
+	// users" counts.
+	hub.SetPresenceHook(func(userID string, _ bool) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := userRepo.TouchLastActive(ctx, userID); err != nil {
+			slog.Warn("failed to record user activity", "user_id", userID, "error", err)
+		}
+	})
 
 	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.JWTExpiryHours)
 
@@ -91,6 +100,17 @@ func main() {
 
 	practiceService := service.NewPracticeService(repository.NewPracticeRepo(db), questionRepo)
 	leaderboardService := service.NewLeaderboardService(repository.NewLeaderboardRepo(db), memCache)
+	flagRepo := repository.NewFlagRepo(db)
+	dailyService := service.NewDailyService(repository.NewDailyRepo(db), questionRepo)
+	friendService := service.NewFriendService(
+		repository.NewFriendRepo(db),
+		userRepo,
+		matchRepo,
+		questionRepo,
+		matchService,
+		hub,
+		memCache,
+	)
 
 	// ── Handlers ──────────────────────────────────────────────────────
 	authHandler := handler.NewAuthHandler(authService)
@@ -100,7 +120,10 @@ func main() {
 	leaderboardHandler := handler.NewLeaderboardHandler(leaderboardService)
 	subjectHandler := handler.NewSubjectHandler(questionRepo)
 	topicHandler := handler.NewTopicHandler(topicRepo)
-	adminHandler := handler.NewAdminHandler(questionRepo, userRepo, matchRepo)
+	adminHandler := handler.NewAdminHandler(questionRepo, userRepo, matchRepo, flagRepo, hub)
+	flagHandler := handler.NewFlagHandler(flagRepo, questionRepo, questionBank)
+	dailyHandler := handler.NewDailyHandler(dailyService)
+	friendHandler := handler.NewFriendHandler(friendService)
 	wsHandler := handler.NewWSHandler(hub, cfg.JWTSecret, matchService)
 
 	// Start the hub only after every message handler is registered so the
@@ -133,6 +156,15 @@ func main() {
 	mux.HandleFunc("POST /api/v1/matches/friend/join", middleware.Auth(cfg.JWTSecret, matchHandler.JoinFriendMatch))
 	mux.HandleFunc("GET /api/v1/matches/queue/stats", middleware.Auth(cfg.JWTSecret, matchHandler.QueueStats))
 
+	// Friends
+	mux.HandleFunc("GET /api/v1/friends", middleware.Auth(cfg.JWTSecret, friendHandler.ListFriends))
+	mux.HandleFunc("POST /api/v1/friends/requests", middleware.Auth(cfg.JWTSecret, friendHandler.SendRequest))
+	mux.HandleFunc("POST /api/v1/friends/requests/{id}/accept", middleware.Auth(cfg.JWTSecret, friendHandler.AcceptRequest))
+	mux.HandleFunc("POST /api/v1/friends/requests/{id}/decline", middleware.Auth(cfg.JWTSecret, friendHandler.DeclineRequest))
+	mux.HandleFunc("DELETE /api/v1/friends/{userId}", middleware.Auth(cfg.JWTSecret, friendHandler.RemoveFriend))
+	mux.HandleFunc("POST /api/v1/friends/{userId}/challenge", middleware.Auth(cfg.JWTSecret, friendHandler.ChallengeFriend))
+	mux.HandleFunc("DELETE /api/v1/friends/challenges/{matchId}", middleware.Auth(cfg.JWTSecret, friendHandler.CloseChallenge))
+
 	// Subjects
 	mux.HandleFunc("GET /api/v1/subjects", middleware.Auth(cfg.JWTSecret, subjectHandler.GetAllSubjects))
 	mux.HandleFunc("GET /api/v1/subjects/{id}/topics", middleware.Auth(cfg.JWTSecret, topicHandler.ListTopics))
@@ -140,6 +172,14 @@ func main() {
 	// Topics
 	mux.HandleFunc("GET /api/v1/topics", middleware.Auth(cfg.JWTSecret, topicHandler.ListTopics))
 	mux.HandleFunc("GET /api/v1/topics/{id}", middleware.Auth(cfg.JWTSecret, topicHandler.GetTopic))
+
+	// Daily challenge
+	mux.HandleFunc("GET /api/v1/daily-challenge", middleware.Auth(cfg.JWTSecret, dailyHandler.Overview))
+	mux.HandleFunc("POST /api/v1/daily-challenge/start", middleware.Auth(cfg.JWTSecret, dailyHandler.Start))
+	mux.HandleFunc("POST /api/v1/daily-challenge/submit", middleware.Auth(cfg.JWTSecret, dailyHandler.Submit))
+
+	// Question flags
+	mux.HandleFunc("POST /api/v1/questions/{id}/flag", middleware.Auth(cfg.JWTSecret, flagHandler.FlagQuestion))
 
 	// Practice
 	mux.HandleFunc("POST /api/v1/practice/start", middleware.Auth(cfg.JWTSecret, practiceHandler.StartSession))
@@ -155,6 +195,9 @@ func main() {
 	mux.HandleFunc("POST /api/v1/admin/questions", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", adminHandler.CreateQuestion)))
 	mux.HandleFunc("PUT /api/v1/admin/questions/{id}/publish", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", adminHandler.PublishQuestion)))
 	mux.HandleFunc("GET /api/v1/admin/stats", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", adminHandler.GetSystemStats)))
+	mux.HandleFunc("PUT /api/v1/admin/categories/{id}/sort-order", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", adminHandler.SetCategorySortOrder)))
+	mux.HandleFunc("GET /api/v1/admin/flags", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", flagHandler.ListFlags)))
+	mux.HandleFunc("PUT /api/v1/admin/flags/{questionId}", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", flagHandler.ReviewFlags)))
 
 	// WebSocket
 	mux.HandleFunc("GET /ws", wsHandler.HandleConnection)

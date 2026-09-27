@@ -9,8 +9,9 @@ export default function Navbar() {
 
   const userLinks = [
     ['/app/dashboard', 'Dashboard'],
-    ['/app/matchmaking', 'Ranked Match'],
+    ['/app/matchmaking', 'Play'],
     ['/app/friend', 'Friend Match'],
+    ['/app/friends', 'Friends'],
     ['/app/practice', 'Practice'],
     ['/app/leaderboard', 'Leaderboard'],
     ['/app/profile', 'Profile'],
@@ -18,6 +19,7 @@ export default function Navbar() {
   const adminLinks = [
     ['/admin/dashboard', 'Overview'],
     ['/admin/questions/new', 'Create Question'],
+    ['/admin/flags', 'Flagged Questions'],
     ['/admin/stats', 'System Stats'],
   ]
 

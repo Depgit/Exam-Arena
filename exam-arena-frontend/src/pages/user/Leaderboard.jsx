@@ -19,7 +19,7 @@ export default function Leaderboard() {
   useEffect(() => {
     if (!categoryCode) return
     getLeaderboard(categoryCode, { limit: 50 })
-      .then(({ data }) => setEntries(data))
+      .then(({ data }) => setEntries(data ?? []))
       .catch((err) => setError(err.message))
   }, [categoryCode])
 

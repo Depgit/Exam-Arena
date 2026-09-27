@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSubjects, startPractice, submitPracticeAnswer, endPractice } from '../../api/endpoints'
+import FlagQuestionButton from '../../components/FlagQuestionButton'
 
 export default function Practice() {
   const [subjects, setSubjects] = useState([])
@@ -45,14 +46,19 @@ export default function Practice() {
     }
   }
 
-  async function handleAnswer(optionId) {
+  // Choosing an option is a draft; "Check answer" submits it.
+  function handleSelect(optionId) {
     if (feedback) return
-    const question = session.questions[current]
     setSelected(optionId)
+  }
+
+  async function handleCheck() {
+    if (feedback || !selected) return
+    const question = session.questions[current]
     try {
       const { data } = await submitPracticeAnswer(session.session_id, {
         question_id: question.id,
-        option_id: optionId,
+        option_id: selected,
         time_taken_ms: Date.now() - startRef.current,
       })
       setFeedback(data)
@@ -140,7 +146,10 @@ export default function Practice() {
       <h1>Practice — Question {current + 1} / {session.questions.length}</h1>
       {error && <div className="alert-error">{error}</div>}
       <div className="question-card">
-        <span className={`badge badge-${question.difficulty}`}>{question.difficulty}</span>
+        <div className="question-card-head">
+          <span className={`badge badge-${question.difficulty}`}>{question.difficulty}</span>
+          <FlagQuestionButton questionId={question.id} />
+        </div>
         <p className="question-body">{question.body}</p>
         <div className="options">
           {question.options
@@ -155,14 +164,23 @@ export default function Practice() {
                   className={`option-btn ${isSelected ? 'selected' : ''} ${
                     showResult ? (feedback.is_correct ? 'correct' : 'incorrect') : ''
                   }`}
-                  onClick={() => handleAnswer(opt.id)}
+                  onClick={() => handleSelect(opt.id)}
                   disabled={!!feedback}
+                  aria-pressed={isSelected}
                 >
                   {opt.option_text}
                 </button>
               )
             })}
         </div>
+        {!feedback && selected && (
+          <div className="answer-actions">
+            <p className="muted">You can change your answer until you check it.</p>
+            <button type="button" className="btn-ghost small" onClick={() => setSelected('')}>
+              Clear selection
+            </button>
+          </div>
+        )}
         {feedback && (
           <div className={`feedback-box ${feedback.is_correct ? 'correct' : 'incorrect'}`}>
             <strong>{feedback.is_correct ? 'Correct!' : 'Not quite.'}</strong>
@@ -171,6 +189,11 @@ export default function Practice() {
         )}
       </div>
       <div className="match-nav">
+        {!feedback && (
+          <button className="btn-primary" onClick={handleCheck} disabled={!selected}>
+            Check answer
+          </button>
+        )}
         {feedback && !isLast && <button className="btn-primary" onClick={handleNext}>Next question</button>}
         {feedback && isLast && <button className="btn-primary" onClick={handleFinish}>Finish session</button>}
         <button className="btn-ghost" onClick={handleFinish}>Quit early</button>

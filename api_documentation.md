@@ -17,6 +17,9 @@
    - [Matchmaking (Queue)](#44-matchmaking-queue)
    - [Matches](#45-matches)
    - [Friend Matches](#46-friend-matches)
+   - [Friends](#461-friends)
+   - [Daily Challenge](#471-daily-challenge)
+   - [Question Flags](#472-question-flags)
    - [Practice Mode](#47-practice-mode)
    - [Leaderboard](#48-leaderboard)
    - [Admin](#49-admin-requires-admin-role)
@@ -284,7 +287,7 @@ Get the currently authenticated user's profile.
 
 #### `GET /api/v1/users/{id}`
 
-Get a user's public profile and their ratings per exam category.
+Get a user's public profile and their ratings per exam category. Each rating names its category (`exam_category_code`, `exam_category_name`), and ratings are sorted by category name.
 
 **Path Parameters:**
 | Param | Type | Description |
@@ -312,6 +315,8 @@ Get a user's public profile and their ratings per exam category.
       {
         "user_id": "550e8400-...",
         "exam_category_id": "cat-uuid-ssc",
+        "exam_category_code": "SSC",
+        "exam_category_name": "SSC Exams",
         "rating": 1342,
         "matches_played": 15,
         "updated_at": "2026-09-09T14:00:00Z"
@@ -325,7 +330,7 @@ Get a user's public profile and their ratings per exam category.
 
 #### `GET /api/v1/users/{id}/stats`
 
-Get a user's detailed statistics per exam category.
+Get a user's detailed statistics per exam category. Each entry names its category, and entries are sorted by category name.
 
 **Success Response:** `200 OK`
 ```json
@@ -335,6 +340,8 @@ Get a user's detailed statistics per exam category.
     {
       "user_id": "550e8400-...",
       "exam_category_id": "cat-uuid-ssc",
+      "exam_category_code": "SSC",
+      "exam_category_name": "SSC Exams",
       "total_matches": 25,
       "wins": 15,
       "losses": 8,
@@ -376,7 +383,7 @@ Get a user's match history.
 
 #### `GET /api/v1/subjects` 🔒
 
-Get all active exam categories (subjects) available for matchmaking and practice.
+Get all active exam categories (subjects) available for matchmaking and practice, ordered by `sort_order` and then by name. By default Mathematics, Logical Reasoning and English come first (`sort_order` 1–3); every other category has 100. Admins change the order with `PUT /api/v1/admin/categories/{id}/sort-order`.
 
 **Success Response:** `200 OK`
 ```json
@@ -388,14 +395,16 @@ Get all active exam categories (subjects) available for matchmaking and practice
       "code": "SSC",
       "name": "SSC CGL",
       "description": "Staff Selection Commission Combined Graduate Level",
-      "is_active": true
+      "is_active": true,
+      "sort_order": 100
     },
     {
       "id": "cat-uuid-banking",
       "code": "BANKING",
       "name": "Banking Exams",
       "description": "IBPS PO, SBI PO, RBI Grade B",
-      "is_active": true
+      "is_active": true,
+      "sort_order": 100
     }
   ]
 }
@@ -505,7 +514,7 @@ Join the matchmaking queue. The server will automatically pair you with a simila
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `exam_category_id` | `UUID` | ✅ | The category to queue for |
-| `match_type` | `string` | ❌ | Defaults to `"ranked"`. Options: `ranked`, `arena`, `daily_challenge` |
+| `match_type` | `string` | ❌ | Defaults to `"ranked"`. Options: `ranked` (paired within a rating window that widens while you wait) or `arena` (open to everyone: paired with the longest-waiting player regardless of rating; ratings still update). `daily_challenge` is rejected with `400`: the daily challenge is played from the home page ([§4.7.1](#471-daily-challenge)). |
 
 **Success Response:** `200 OK`
 ```json
@@ -705,6 +714,366 @@ Join an existing friend match room. When the second player joins, the match star
 | `400` | `"room \"XYZ\" not found or already started"` |
 | `400` | `"you are already in this room"` |
 | `400` | `"room is full"` |
+
+---
+
+### 4.6.1 Friends
+
+Users add each other by username. Friends can see each other's online status and challenge each other to a friend match. Every endpoint acts on the signed-in user.
+
+A friendship moves through `pending` → `accepted`, or `pending` → `declined`. A declined request can be sent again. One friendship row exists per pair of users, whichever side sent the request.
+
+#### `GET /api/v1/friends` 🔒
+
+List the user's friends and pending requests. `online` is live (the friend has an open WebSocket).
+
+**Success Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "friends": [
+      {
+        "friendship_id": "friendship-uuid",
+        "user_id": "friend-uuid",
+        "username": "alice",
+        "display_name": "Alice",
+        "avatar_url": null,
+        "status": "accepted",
+        "direction": "outgoing",
+        "online": true,
+        "created_at": "2026-09-27T10:00:00Z",
+        "responded_at": "2026-09-27T10:05:00Z"
+      }
+    ],
+    "incoming": [],
+    "outgoing": []
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `friends` | Accepted friendships |
+| `incoming` | Pending requests other users sent to you. Accept or decline them with `friendship_id` |
+| `outgoing` | Pending requests you sent |
+| `direction` | `incoming` or `outgoing`: who sent the original request |
+
+---
+
+#### `POST /api/v1/friends/requests` 🔒
+
+Send a friend request by username. The recipient gets a `friend_request` WebSocket message.
+
+If that user has already sent you a pending request, it is accepted instead: the response is `200` and they get `friend_request_accepted`.
+
+**Request Body:**
+```json
+{
+  "username": "alice"
+}
+```
+
+**Success Response:** `201 Created` (request sent) or `200 OK` (mutual request, now friends)
+```json
+{
+  "success": true,
+  "data": {
+    "friendship": {
+      "id": "friendship-uuid",
+      "requester_id": "your-uuid",
+      "addressee_id": "alice-uuid",
+      "status": "pending",
+      "created_at": "2026-09-27T10:00:00Z",
+      "responded_at": null
+    },
+    "message": "friend request sent"
+  }
+}
+```
+
+**Error Responses:**
+| Status | Error |
+|---|---|
+| `400` | `"username is required"` |
+| `400` | `"you cannot add yourself as a friend"` |
+| `404` | `"user not found"` |
+| `409` | `"friend request already sent"` |
+| `409` | `"you are already friends"` |
+| `403` | `"cannot send a friend request to this user"` |
+
+---
+
+#### `POST /api/v1/friends/requests/{id}/accept` 🔒
+#### `POST /api/v1/friends/requests/{id}/decline` 🔒
+
+Answer a pending request that was sent to you. `{id}` is the `friendship_id` from the `incoming` list. On accept, the sender gets a `friend_request_accepted` WebSocket message. A decline sends no notification.
+
+**Success Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "friendship": { "id": "friendship-uuid", "status": "accepted", "...": "..." }
+  }
+}
+```
+
+**Error Responses:**
+| Status | Error |
+|---|---|
+| `404` | `"friend request not found"`: unknown id, not addressed to you, or already answered |
+
+---
+
+#### `DELETE /api/v1/friends/{userId}` 🔒
+
+Remove the friendship with `{userId}`. The same call unfriends someone, withdraws a request you sent, or dismisses one you received.
+
+**Success Response:** `200 OK`
+```json
+{ "success": true, "data": { "status": "removed" } }
+```
+
+**Error Responses:**
+| Status | Error |
+|---|---|
+| `404` | `"you are not friends with this user"` |
+
+---
+
+#### `POST /api/v1/friends/{userId}/challenge` 🔒
+
+Challenge a friend to a match. This opens a friend match room, as `POST /api/v1/matches/friend` does, and sends the friend a `friend_challenge` WebSocket message.
+
+- The friend **accepts** by joining the room: `POST /api/v1/matches/friend/join` with the `room_code`. The match then starts as a normal friend match and both players get `match_start`.
+- The friend **declines**, or you **cancel**, with `DELETE /api/v1/friends/challenges/{matchId}`.
+
+The friend must be online, and the category must have enough published questions for a match (10).
+
+**Request Body:**
+```json
+{
+  "exam_category_id": "cat-uuid-banking"
+}
+```
+
+**Success Response:** `201 Created`
+```json
+{
+  "success": true,
+  "data": {
+    "match_id": "match-uuid",
+    "room_code": "MZYEES",
+    "friend_id": "friend-uuid",
+    "exam_category_id": "cat-uuid-banking",
+    "exam_category_name": "Banking Exams",
+    "expires_in_seconds": 600
+  }
+}
+```
+
+> [!NOTE]
+> `expires_in_seconds` is how long the challenge can be declined or cancelled through the friends API. After that the room behaves like any other friend match room, and anyone with the code can still join it.
+
+**Error Responses:**
+| Status | Error |
+|---|---|
+| `400` | `"exam_category_id is required"` |
+| `404` | `"you are not friends with this user"` |
+| `404` | `"exam category not found"` |
+| `409` | `"your friend is offline"` |
+| `409` | `"not enough questions in this category yet — pick another category"` |
+
+---
+
+#### `DELETE /api/v1/friends/challenges/{matchId}` 🔒
+
+Close an open challenge: the invited friend declines it, or the challenger cancels it. The waiting match is set to `cancelled` and its room code stops working. The other player is notified: the challenger gets `friend_challenge_declined`, the friend gets `friend_challenge_cancelled`.
+
+**Success Response:** `200 OK`
+```json
+{ "success": true, "data": { "status": "closed" } }
+```
+
+**Error Responses:**
+| Status | Error |
+|---|---|
+| `404` | `"challenge not found or no longer pending"`: unknown, expired, already closed, already started, or you are not one of its two players |
+
+---
+
+### 4.7.1 Daily Challenge
+
+A solo challenge shown on the home page. Everyone gets the **same 10 questions** each day, drawn from all published questions. The day rolls over at **midnight IST**. Each player gets **one attempt per day** with a **180-second** limit that starts at the first `start` call. Grading happens on the server. Players are ranked by most correct answers, then by fastest time.
+
+#### `GET /api/v1/daily-challenge` 🔒
+
+Today's challenge, the caller's attempt, and the top 10.
+
+**Success Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "date": "2026-09-27",
+    "available": true,
+    "question_count": 10,
+    "time_limit_seconds": 180,
+    "resets_at": "2026-09-28T00:00:00+05:30",
+    "participants": 12,
+    "attempt": {
+      "status": "completed",
+      "started_at": "2026-09-27T08:00:00Z",
+      "deadline": "2026-09-27T08:03:00Z",
+      "correct": 8,
+      "total": 10,
+      "time_taken_ms": 83000,
+      "rank": 3,
+      "review": [ { "...": "same shape as in the submit response" } ]
+    },
+    "leaderboard": [
+      { "rank": 1, "user_id": "uuid", "username": "alice", "display_name": "Alice", "correct": 10, "total": 10, "time_taken_ms": 61000 }
+    ]
+  }
+}
+```
+
+- `available` is `false` when there are no published questions; then `attempt` is `null` and `leaderboard` is empty.
+- `attempt` is `null` until the player presses Start. Its `status` is `in_progress` or `completed`. `rank` and `review` appear only once it is completed.
+
+---
+
+#### `POST /api/v1/daily-challenge/start` 🔒
+
+Start today's attempt, or resume one already in progress, and get the questions. The response does not include the correct answers. Calling it again returns the same attempt with the same `started_at`.
+
+**Success Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "date": "2026-09-27",
+    "started_at": "2026-09-27T08:00:00Z",
+    "deadline": "2026-09-27T08:03:00Z",
+    "server_time": "2026-09-27T08:00:00Z",
+    "time_limit_seconds": 180,
+    "questions": [ { "...": "QuestionForPlayer (see §6)" } ]
+  }
+}
+```
+
+> [!TIP]
+> Run the countdown as `Date.now() + (deadline - server_time)` so a wrong device clock doesn't matter.
+
+**Error Responses:**
+| Status | Error |
+|---|---|
+| `404` | `"no daily challenge available today"` |
+| `409` | `"you have already played today's challenge"` |
+
+---
+
+#### `POST /api/v1/daily-challenge/submit` 🔒
+
+Submit every answer at once. Leave a question out, or send an empty `option_id`, to skip it. A submit that arrives more than 10 seconds after the deadline scores 0 and returns `expired: true`. An attempt left open past its deadline is closed with a score of 0 the next time the player calls the challenge endpoints.
+
+**Request Body:**
+```json
+{
+  "answers": [
+    { "question_id": "q-uuid-1", "option_id": "opt-uuid-b" },
+    { "question_id": "q-uuid-2", "option_id": "" }
+  ]
+}
+```
+
+**Success Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "correct": 8,
+    "total": 10,
+    "time_taken_ms": 83000,
+    "expired": false,
+    "rank": 3,
+    "participants": 12,
+    "review": [
+      {
+        "question_id": "q-uuid-1",
+        "body": "What comes next: 2, 6, 12, 20, ?",
+        "selected_option_id": "opt-uuid-b",
+        "selected_option_text": "30",
+        "correct_option_id": "opt-uuid-b",
+        "correct_option_text": "30",
+        "is_correct": true,
+        "explanation": "Differences are 4, 6, 8, 10."
+      }
+    ]
+  }
+}
+```
+
+**Error Responses:**
+| Status | Error |
+|---|---|
+| `400` | `"start today's challenge first"` |
+| `409` | `"you have already played today's challenge"` |
+
+---
+
+### 4.7.2 Question Flags
+
+Players report questions they think are faulty. Admins review the reports.
+
+#### `POST /api/v1/questions/{id}/flag` 🔒
+
+Flag a question. The id is any question id a player can see: in a live match, practice, or the daily challenge. A player can have **one open flag per question**. They can flag it again after an admin closes the earlier one.
+
+**Request Body:**
+```json
+{
+  "reason": "wrong_answer",
+  "description": "Option B is also correct"
+}
+```
+
+| `reason` | Meaning |
+|---|---|
+| `wrong_answer` | The answer marked correct is wrong |
+| `multiple_correct` | More than one option is correct |
+| `unclear` | The question or options are ambiguous |
+| `typo` | Spelling or formatting mistake |
+| `other` | Anything else. `description` is required |
+
+`description` is optional (except for `other`), up to 500 characters.
+
+**Success Response:** `201 Created`
+```json
+{
+  "success": true,
+  "data": {
+    "id": "flag-uuid",
+    "question_id": "q-uuid",
+    "reporter_id": "user-uuid",
+    "reason": "wrong_answer",
+    "description": "Option B is also correct",
+    "status": "open",
+    "created_at": "2026-09-27T08:00:00Z",
+    "resolved_at": null
+  }
+}
+```
+
+**Error Responses:**
+| Status | Error |
+|---|---|
+| `400` | `"reason must be one of wrong_answer, multiple_correct, unclear, typo, other"` |
+| `400` | `"please describe the problem"` (reason `other` with no description) |
+| `400` | `"description must be at most 500 characters"` |
+| `404` | `"question not found"` |
+| `409` | `"you have already flagged this question"` |
 
 ---
 
@@ -1006,12 +1375,87 @@ Get system-wide statistics.
   "success": true,
   "data": {
     "users": 1250,
+    "live_users": 37,
+    "active_users_24h": 212,
+    "active_users_7d": 640,
     "questions": 5000,
     "active_matches": 12,
-    "total_matches": 8500
+    "total_matches": 8500,
+    "open_flagged_questions": 4
   }
 }
 ```
+
+| Field | Meaning |
+|---|---|
+| `live_users` | Users with a WebSocket connection open right now |
+| `active_users_24h` / `active_users_7d` | Users who logged in, or whose WebSocket connected or disconnected, within the window, plus everyone live now |
+| `open_flagged_questions` | Questions with at least one open flag |
+
+---
+
+#### `PUT /api/v1/admin/categories/{id}/sort-order` 🔒👑
+
+Set where a category appears in lists. Lower numbers come first, and ties sort by name.
+
+**Request Body:** `{ "sort_order": 1 }`
+
+**Success Response:** `200 OK` → `{ "id": "cat-uuid", "sort_order": 1 }`
+
+**Error Responses:** `400` `"sort_order is required"`, `404` `"exam category not found"`
+
+---
+
+#### `GET /api/v1/admin/flags` 🔒👑
+
+Flagged questions with their flags, most-flagged first. Each item includes the options, with `is_correct`, so the admin can judge the report.
+
+**Query Parameters:** `status`: `open` (default), `reviewed`, `resolved`, `dismissed`, or `all`.
+
+**Success Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "question_id": "q-uuid",
+      "body": "What comes next: 2, 6, 12, 20, ?",
+      "question_status": "published",
+      "exam_category_name": "SSC Exams",
+      "topic_name": "Number Series",
+      "explanation": null,
+      "options": [ { "id": "opt-uuid", "option_text": "30", "is_correct": true, "order_index": 1 } ],
+      "flag_count": 2,
+      "reasons": { "wrong_answer": 1, "unclear": 1 },
+      "latest_flag_at": "2026-09-27T08:00:00Z",
+      "flags": [
+        { "id": "flag-uuid", "reporter_username": "alice", "reason": "wrong_answer", "description": "B is right", "status": "open", "created_at": "..." }
+      ]
+    }
+  ],
+  "meta": { "status": "open", "count": 1 }
+}
+```
+
+---
+
+#### `PUT /api/v1/admin/flags/{questionId}` 🔒👑
+
+Close every open flag on a question.
+
+**Request Body:**
+```json
+{ "status": "resolved", "archive_question": false }
+```
+
+| Field | Description |
+|---|---|
+| `status` | `resolved` (question fixed), `dismissed` (question is fine), or `reviewed` |
+| `archive_question` | `true` also sets the question to `archived` and removes it from play immediately |
+
+**Success Response:** `200 OK` → `{ "question_id": "q-uuid", "flags_closed": 2, "status": "resolved", "question_archived": false }`
+
+**Error Responses:** `400` invalid status, `404` `"question not found"`
 
 ---
 
@@ -1074,6 +1518,9 @@ All messages must be JSON with this shape:
 ```
 
 #### `submit_answer`
+
+> [!NOTE]
+> **When the web client sends this:** clicking an option only selects it, and the player can change or clear the selection. The answer is sent when the player presses **Next**, or **Submit answer** on the last question. That is also when `score_update` fires and the scores change, so picking an option never reveals whether it's correct.
 
 Submit an answer during a live match.
 
@@ -1268,6 +1715,9 @@ Sent when the match ends (either all questions answered or timer expired).
 }
 ```
 
+> [!NOTE]
+> Players with equal scores share a rank. In a draw, both players have `rank: 1`, so show a draw when more than one player has rank 1.
+
 ---
 
 #### `match_failed`
@@ -1279,6 +1729,78 @@ Sent if a match could not be started (e.g., not enough questions for the categor
   "type": "match_failed",
   "payload": {
     "reason": "not enough questions available for this category"
+  }
+}
+```
+
+---
+
+#### `friend_request`
+
+Someone sent you a friend request.
+
+```json
+{
+  "type": "friend_request",
+  "payload": {
+    "friendship_id": "friendship-uuid",
+    "from_user_id": "user-uuid",
+    "from_username": "alice"
+  }
+}
+```
+
+---
+
+#### `friend_request_accepted`
+
+A user accepted your friend request, or your request completed a mutual one.
+
+```json
+{
+  "type": "friend_request_accepted",
+  "payload": {
+    "friendship_id": "friendship-uuid",
+    "user_id": "user-uuid",
+    "username": "carol"
+  }
+}
+```
+
+---
+
+#### `friend_challenge`
+
+A friend challenged you. To accept, join with `POST /api/v1/matches/friend/join` using `room_code`. To decline, call `DELETE /api/v1/friends/challenges/{match_id}`.
+
+```json
+{
+  "type": "friend_challenge",
+  "payload": {
+    "match_id": "match-uuid",
+    "room_code": "MZYEES",
+    "from_user_id": "user-uuid",
+    "from_username": "alice",
+    "exam_category_id": "cat-uuid-banking",
+    "exam_category_name": "Banking Exams",
+    "expires_in_seconds": 600
+  }
+}
+```
+
+---
+
+#### `friend_challenge_declined` / `friend_challenge_cancelled`
+
+The challenge was closed by the other player. The challenger gets `friend_challenge_declined`; the invited friend gets `friend_challenge_cancelled`.
+
+```json
+{
+  "type": "friend_challenge_declined",
+  "payload": {
+    "match_id": "match-uuid",
+    "by_user_id": "user-uuid",
+    "by_username": "carol"
   }
 }
 ```
@@ -1329,6 +1851,8 @@ interface User {
 interface UserRating {
   user_id: string;
   exam_category_id: string;
+  exam_category_code: string;  // e.g. "SSC"
+  exam_category_name: string;  // e.g. "SSC Exams"
   rating: number;           // default 1200 (Elo)
   matches_played: number;
   updated_at: string;
@@ -1341,11 +1865,13 @@ interface UserRating {
 interface UserStatistics {
   user_id: string;
   exam_category_id: string;
+  exam_category_code: string;  // e.g. "SSC"
+  exam_category_name: string;  // e.g. "SSC Exams"
   total_matches: number;
   wins: number;
   losses: number;
-  draws: number;
-  current_win_streak: number;
+  draws: number;                 // a draw is not counted as a win or a loss
+  current_win_streak: number;    // reset to 0 by a loss or a draw
   longest_win_streak: number;
   longest_losing_streak: number;
   total_questions_solved: number;
@@ -1483,6 +2009,13 @@ New_Rating_A = Rating_A + K * (Score_A - Expected_A)
 ```
 
 Where `Score_A` is 1.0 (win), 0.5 (draw), or 0.0 (loss).
+
+**Draws:** the higher-rated player's rating never goes down on a draw. It stays the same, and the lower-rated player gains the normal Elo amount. With equal ratings, a draw changes neither rating.
+
+| Draw example | Standard Elo | Exam Arena |
+|---|---|---|
+| 1216 vs 1184 | −1 / +1 | **0** / +1 |
+| 1500 vs 1200 | −11 / +11 | **0** / +11 |
 
 > [!NOTE]
 > **Friend matches also update Elo ratings.** Rating changes happen asynchronously after the match ends.
@@ -1622,6 +2155,17 @@ sequenceDiagram
 | `GET` | `/api/v1/matches/{id}` | 🔒 | Get match details |
 | `POST` | `/api/v1/matches/friend` | 🔒 | Create friend match room |
 | `POST` | `/api/v1/matches/friend/join` | 🔒 | Join friend match room |
+| `GET` | `/api/v1/friends` | 🔒 | List friends + pending requests |
+| `POST` | `/api/v1/friends/requests` | 🔒 | Send friend request by username |
+| `POST` | `/api/v1/friends/requests/{id}/accept` | 🔒 | Accept friend request |
+| `POST` | `/api/v1/friends/requests/{id}/decline` | 🔒 | Decline friend request |
+| `DELETE` | `/api/v1/friends/{userId}` | 🔒 | Unfriend / withdraw / dismiss request |
+| `POST` | `/api/v1/friends/{userId}/challenge` | 🔒 | Challenge a friend to a match |
+| `DELETE` | `/api/v1/friends/challenges/{matchId}` | 🔒 | Decline or cancel a challenge |
+| `GET` | `/api/v1/daily-challenge` | 🔒 | Today's challenge, your attempt, top 10 |
+| `POST` | `/api/v1/daily-challenge/start` | 🔒 | Start / resume today's attempt |
+| `POST` | `/api/v1/daily-challenge/submit` | 🔒 | Submit and grade today's attempt |
+| `POST` | `/api/v1/questions/{id}/flag` | 🔒 | Flag a faulty question |
 | `POST` | `/api/v1/practice/start` | 🔒 | Start practice session |
 | `POST` | `/api/v1/practice/{id}/answer` | 🔒 | Submit practice answer |
 | `POST` | `/api/v1/practice/{id}/end` | 🔒 | End practice session |
@@ -1630,6 +2174,9 @@ sequenceDiagram
 | `POST` | `/api/v1/admin/topics` | 🔒👑 | Create topic |
 | `POST` | `/api/v1/admin/questions` | 🔒👑 | Create question |
 | `PUT` | `/api/v1/admin/questions/{id}/publish` | 🔒👑 | Publish question |
-| `GET` | `/api/v1/admin/stats` | 🔒👑 | System statistics |
+| `GET` | `/api/v1/admin/stats` | 🔒👑 | System statistics (incl. live / active users) |
+| `PUT` | `/api/v1/admin/categories/{id}/sort-order` | 🔒👑 | Set category display order |
+| `GET` | `/api/v1/admin/flags` | 🔒👑 | Flagged questions for review |
+| `PUT` | `/api/v1/admin/flags/{questionId}` | 🔒👑 | Resolve / dismiss flags, optionally archive |
 | `GET` | `/health` | ❌ | Health check |
 | `GET` | `/ws?token=<JWT>` | 🔒 (via query) | WebSocket connection |

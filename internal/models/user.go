@@ -20,16 +20,20 @@ type User struct {
 }
 
 type UserRating struct {
-	UserID         string    `json:"user_id"`
-	ExamCategoryID string    `json:"exam_category_id"`
-	Rating         int       `json:"rating"`
-	MatchesPlayed  int       `json:"matches_played"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	UserID           string    `json:"user_id"`
+	ExamCategoryID   string    `json:"exam_category_id"`
+	ExamCategoryCode string    `json:"exam_category_code,omitempty"`
+	ExamCategoryName string    `json:"exam_category_name,omitempty"`
+	Rating           int       `json:"rating"`
+	MatchesPlayed    int       `json:"matches_played"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type UserStatistics struct {
 	UserID                string  `json:"user_id"`
 	ExamCategoryID        string  `json:"exam_category_id"`
+	ExamCategoryCode      string  `json:"exam_category_code"`
+	ExamCategoryName      string  `json:"exam_category_name"`
 	TotalMatches          int     `json:"total_matches"`
 	Wins                  int     `json:"wins"`
 	Losses                int     `json:"losses"`

@@ -86,6 +86,19 @@ func (r *MatchRepo) UpdateMatchStatus(ctx context.Context, matchID, status strin
 	return err
 }
 
+// CancelWaitingMatch cancels a match that has not started yet. It reports
+// false when the match is no longer waiting (it started or already ended).
+func (r *MatchRepo) CancelWaitingMatch(ctx context.Context, matchID string) (bool, error) {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE matches SET status = 'cancelled', ended_at = now()
+		WHERE id = $1 AND status = 'waiting'
+	`, matchID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
 func (r *MatchRepo) AddPlayer(ctx context.Context, matchID, userID string, ratingBefore *int) (*models.MatchPlayer, error) {
 	mp := &models.MatchPlayer{}
 	err := r.db.QueryRow(ctx, `

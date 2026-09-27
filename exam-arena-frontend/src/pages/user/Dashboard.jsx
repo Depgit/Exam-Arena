@@ -1,7 +1,69 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { getSubjects, getUserStats, getLeaderboard } from '../../api/endpoints'
+import { getSubjects, getUserStats, getLeaderboard, getDailyChallenge } from '../../api/endpoints'
+import { formatDuration } from './DailyChallenge'
+
+function DailyChallengeCard() {
+  const [daily, setDaily] = useState(null)
+
+  useEffect(() => {
+    getDailyChallenge()
+      .then(({ data }) => setDaily(data))
+      .catch(() => setDaily(null))
+  }, [])
+
+  if (!daily) return null
+  const attempt = daily.attempt
+
+  let status
+  let cta
+  if (!daily.available) {
+    status = <p className="muted">No challenge today — check back tomorrow.</p>
+  } else if (attempt?.status === 'completed') {
+    status = (
+      <p>
+        You scored <strong>{attempt.correct}/{attempt.total}</strong> in {formatDuration(attempt.time_taken_ms)}
+        {attempt.rank ? <> · rank <strong>#{attempt.rank}</strong> of {daily.participants}</> : null}
+      </p>
+    )
+    cta = <Link to="/app/daily" className="btn-ghost">View results</Link>
+  } else if (attempt?.status === 'in_progress') {
+    status = <p>Your attempt is in progress — the clock is running.</p>
+    cta = <Link to="/app/daily" className="btn-primary">Resume challenge →</Link>
+  } else {
+    status = (
+      <p>
+        {daily.question_count} questions · {Math.round(daily.time_limit_seconds / 60)} min · one attempt
+        {daily.participants > 0 && <span className="muted"> · {daily.participants} played today</span>}
+      </p>
+    )
+    cta = <Link to="/app/daily" className="btn-primary">Start challenge →</Link>
+  }
+
+  const top = daily.leaderboard.slice(0, 3)
+  return (
+    <section className="daily-card">
+      <div className="daily-card-main">
+        <span className="daily-eyebrow">📅 Daily Challenge · {daily.date}</span>
+        <h2>Same questions for everyone today</h2>
+        {status}
+        {cta}
+      </div>
+      {top.length > 0 && (
+        <ol className="daily-top">
+          {top.map((e) => (
+            <li key={e.user_id}>
+              <span className="lb-rank">#{e.rank}</span>
+              <span className="lb-name">{e.display_name || e.username}</span>
+              <span className="muted">{e.correct}/{e.total} · {formatDuration(e.time_taken_ms)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  )
+}
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -20,12 +82,12 @@ export default function Dashboard() {
           getUserStats(user.id),
         ])
         setSubjects(subs)
-        setStats(st)
+        setStats(st ?? [])
         // Load leaderboard for the first available subject
         if (subs.length > 0) {
           setLbCategory(subs[0])
           const { data: lb } = await getLeaderboard(subs[0].code, { limit: 10 })
-          setLeaderboard(lb)
+          setLeaderboard(lb ?? [])
         }
       } catch (err) {
         setError(err.message)
@@ -38,7 +100,7 @@ export default function Dashboard() {
     setLbCategory(sub)
     try {
       const { data: lb } = await getLeaderboard(sub.code, { limit: 10 })
-      setLeaderboard(lb)
+      setLeaderboard(lb ?? [])
     } catch {
       // ignore; old data stays
     }
@@ -52,11 +114,13 @@ export default function Dashboard() {
       <div className="dashboard-layout">
         {/* ── Left / Main column ────────────────────────────────── */}
         <div className="dashboard-main">
+          <DailyChallengeCard />
+
           <div className="card-grid">
             <Link to="/app/matchmaking" className="action-card ranked">
               <div className="action-icon">⚔️</div>
               <h3>Ranked Match</h3>
-              <p>Queue up and get paired with a similarly-rated opponent.</p>
+              <p>Ranked queue with similarly-rated opponents, or Arena — open to everyone.</p>
             </Link>
             <Link to="/app/friend" className="action-card friend">
               <div className="action-icon">👥</div>

@@ -16,6 +16,9 @@ type Hub struct {
 	incoming   chan *IncomingMessage
 	handlers   map[string]MessageHandler
 	done       chan struct{}
+	// onPresence, if set, is called (in its own goroutine) when a user
+	// connects or disconnects.
+	onPresence func(userID string, online bool)
 }
 
 type MessageHandler func(client *Client, payload json.RawMessage)
@@ -45,16 +48,22 @@ func (h *Hub) Run() {
 			total := len(h.clients)
 			h.mu.Unlock()
 			slog.Info("client connected", "user_id", client.userID, "total", total)
+			h.notifyPresence(client.userID, true)
 
 		case client := <-h.unregister:
 			h.mu.Lock()
+			removed := false
 			if existing, ok := h.clients[client.userID]; ok && existing == client {
 				delete(h.clients, client.userID)
 				client.closeSend()
+				removed = true
 			}
 			total := len(h.clients)
 			h.mu.Unlock()
 			slog.Info("client disconnected", "user_id", client.userID, "total", total)
+			if removed {
+				h.notifyPresence(client.userID, false)
+			}
 
 		case msg := <-h.incoming:
 			h.handleMessage(msg)
@@ -73,6 +82,17 @@ func (h *Hub) Run() {
 
 func (h *Hub) Register(client *Client) {
 	h.register <- client
+}
+
+// SetPresenceHook must be called before Run.
+func (h *Hub) SetPresenceHook(fn func(userID string, online bool)) {
+	h.onPresence = fn
+}
+
+func (h *Hub) notifyPresence(userID string, online bool) {
+	if h.onPresence != nil {
+		go h.onPresence(userID, online)
+	}
 }
 
 // RegisterHandler must be called before Run starts consuming messages.
@@ -144,6 +164,17 @@ func (h *Hub) IsOnline(userID string) bool {
 	defer h.mu.RUnlock()
 	_, ok := h.clients[userID]
 	return ok
+}
+
+// OnlineUserIDs returns the IDs of every connected user.
+func (h *Hub) OnlineUserIDs() []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	ids := make([]string, 0, len(h.clients))
+	for id := range h.clients {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 func (h *Hub) OnlineCount() int {

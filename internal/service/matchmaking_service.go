@@ -44,8 +44,14 @@ func (s *MatchmakingService) JoinQueue(ctx context.Context, userID, username str
 	if req.ExamCategoryID == "" {
 		return fmt.Errorf("exam_category_id is required")
 	}
-	if req.MatchType == "" {
+	switch req.MatchType {
+	case "":
 		req.MatchType = "ranked"
+	case "ranked", matchmaking.MatchTypeArena:
+	case "daily_challenge":
+		return fmt.Errorf("the daily challenge is played from the home page, not the queue")
+	default:
+		return fmt.Errorf("match_type must be \"ranked\" or \"arena\"")
 	}
 
 	// Ensure a rating row exists so we have a meaningful Elo score.

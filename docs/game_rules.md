@@ -85,6 +85,20 @@ Fixed duration event.
 
 Highest score wins.
 
+Open to everyone: players are paired with the longest-waiting player in the pool regardless of rating. Ratings still update.
+
+---
+
+## Daily Challenge
+
+Solo, played from the home page (not a matchmaking queue).
+
+Same 10 questions for every player each day; the day resets at midnight IST.
+
+One attempt per day, 180 seconds, answers can be changed until submitted.
+
+Ranked by most correct, then fastest time. No rating change.
+
 ---
 
 ## Tournament
@@ -294,7 +308,7 @@ Winner gains rating.
 
 Loser loses rating.
 
-Draw updates rating according to Elo rules.
+Draw never lowers the higher-rated player's rating: it stays unchanged, while the lower-rated player gains according to Elo rules.
 
 Friend Battles never modify rating.
 
@@ -490,7 +504,13 @@ Correct answers equal
 
 Time equal
 
-Both players receive Elo updates according to draw calculation.
+The higher-rated player's rating stays unchanged.
+
+The lower-rated player gains rating according to the Elo draw calculation.
+
+With equal ratings, neither rating changes.
+
+A draw counts as a draw in statistics (not a win or a loss) and ends the current win streak.
 
 ---
 

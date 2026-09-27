@@ -3,6 +3,7 @@ import { useLocation, useParams, useNavigate } from 'react-router-dom'
 import { getMatch } from '../../api/endpoints'
 import { useAuth } from '../../context/AuthContext'
 import { useWebSocket, useWSListener } from '../../context/WebSocketContext'
+import FlagQuestionButton from '../../components/FlagQuestionButton'
 
 export default function LiveMatch() {
   const { matchId } = useParams()
@@ -16,9 +17,12 @@ export default function LiveMatch() {
   const [timerSeconds, setTimerSeconds] = useState(location.state?.timer_seconds ?? null)
   const [remaining, setRemaining] = useState(location.state?.timer_seconds ?? null)
   const [scoreboard, setScoreboard] = useState([])
-  const [answeredIds, setAnsweredIds] = useState(new Set())
+  const [answeredIds, setAnsweredIds] = useState(new Set()) // acknowledged by the server
+  const [sentIds, setSentIds] = useState(new Set()) // sent, maybe not yet acknowledged
   const [current, setCurrent] = useState(0)
-  const [selected, setSelected] = useState('')
+  // questionId → optionId. A selection is only a draft: it can be changed or
+  // cleared, and is sent (and scored) when the player presses Next.
+  const [selections, setSelections] = useState({})
   const [results, setResults] = useState(null)
   const [error, setError] = useState('')
   const questionStartRef = useRef(Date.now())
@@ -79,49 +83,84 @@ export default function LiveMatch() {
   })
 
   const question = questions[current]
-  const alreadyAnswered = question ? answeredIds.has(question.id) : false
+  const isLocked = (id) => answeredIds.has(id) || sentIds.has(id)
+  const alreadyAnswered = question ? isLocked(question.id) : false
+  const selected = question ? selections[question.id] || '' : ''
+  const isLast = current >= questions.length - 1
 
   // True when this user has answered every question
-  const allDone = questions.length > 0 && answeredIds.size >= questions.length
+  const allDone =
+    questions.length > 0 && questions.every((q) => isLocked(q.id))
 
   const myScore = useMemo(
     () => scoreboard.find((s) => s.user_id === user.id),
     [scoreboard, user.id]
   )
 
-  function submitAnswer(optionId) {
+  function selectOption(optionId) {
     if (!question || alreadyAnswered) return
-    const timeTakenMs = Date.now() - questionStartRef.current
-    setSelected(optionId)
-    send('submit_answer', {
-      match_id: matchId,
-      question_id: question.id,
-      option_id: optionId,
-      time_taken_ms: timeTakenMs,
+    setSelections((s) => ({ ...s, [question.id]: optionId }))
+  }
+
+  function clearSelection() {
+    if (!question || alreadyAnswered) return
+    setSelections((s) => {
+      const next = { ...s }
+      delete next[question.id]
+      return next
     })
   }
 
+  // Next submits the selected answer (if any) and moves on. On the last
+  // question it jumps back to the first one still unanswered.
   function goNext() {
-    setSelected('')
-    setCurrent((c) => Math.min(c + 1, questions.length - 1))
+    if (!question) return
+    let sent = null
+    if (!alreadyAnswered && selected) {
+      send('submit_answer', {
+        match_id: matchId,
+        question_id: question.id,
+        option_id: selected,
+        time_taken_ms: Date.now() - questionStartRef.current,
+      })
+      sent = question.id
+      setSentIds((prev) => new Set(prev).add(question.id))
+    }
+    if (!isLast) {
+      setCurrent(current + 1)
+      return
+    }
+    const firstOpen = questions.findIndex((q) => q.id !== sent && !isLocked(q.id))
+    if (firstOpen !== -1) setCurrent(firstOpen)
   }
+
+  const nextLabel = alreadyAnswered
+    ? 'Next question →'
+    : selected
+      ? isLast ? 'Submit answer' : 'Next question →'
+      : isLast ? 'Submit answer' : 'Skip →'
+  const nextDisabled = isLast && (alreadyAnswered || !selected)
 
   // ── Results screen ──────────────────────────────────────────────────
   if (results) {
     const sorted = [...results].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))
     const me = sorted.find((r) => r.user_id === user.id)
+    // The server gives tied players the same rank.
+    const isDraw = me?.rank === 1 && sorted.filter((r) => r.rank === 1).length > 1
 
     return (
       <div className="page match-results-page">
         <div className="results-header">
-          {me?.rank === 1 ? (
+          {isDraw ? (
+            <div className="results-trophy">🤝</div>
+          ) : me?.rank === 1 ? (
             <div className="results-trophy">🏆</div>
           ) : me?.rank === 2 ? (
             <div className="results-trophy">🥈</div>
           ) : (
             <div className="results-trophy">⚔️</div>
           )}
-          <h1>{me?.rank === 1 ? 'You Won!' : me?.rank === 2 ? 'You Lost' : 'Match Over'}</h1>
+          <h1>{isDraw ? "It's a Draw" : me?.rank === 1 ? 'You Won!' : me?.rank === 2 ? 'You Lost' : 'Match Over'}</h1>
           <p className="muted">{me?.correct != null ? `${me.correct}/${me.total} correct` : ''}</p>
         </div>
 
@@ -184,7 +223,7 @@ export default function LiveMatch() {
       <div className="page match-page">
         <div className="match-header">
           <div>All questions answered ✅</div>
-          {remaining != null && <div className="timer">⏱ {remaining}s</div>}
+          {remaining != null && <div className={`timer ${remaining <= 10 ? 'timer-low' : ''}`}>⏱ {remaining}s</div>}
         </div>
 
         <div className="scoreboard">
@@ -213,7 +252,7 @@ export default function LiveMatch() {
     <div className="page match-page">
       <div className="match-header">
         <div>Question {current + 1} / {questions.length}</div>
-        {remaining != null && <div className="timer">⏱ {remaining}s</div>}
+        {remaining != null && <div className={`timer ${remaining <= 10 ? 'timer-low' : ''}`}>⏱ {remaining}s</div>}
       </div>
 
       <div className="scoreboard">
@@ -234,7 +273,10 @@ export default function LiveMatch() {
       </div>
 
       <div className="question-card">
-        <span className={`badge badge-${question.difficulty}`}>{question.difficulty}</span>
+        <div className="question-card-head">
+          <span className={`badge badge-${question.difficulty}`}>{question.difficulty}</span>
+          <FlagQuestionButton questionId={question.id} />
+        </div>
         <p className="question-body">{question.body}</p>
         <div className="options">
           {question.options
@@ -244,15 +286,29 @@ export default function LiveMatch() {
               <button
                 key={opt.id}
                 className={`option-btn ${selected === opt.id ? 'selected' : ''}`}
-                onClick={() => submitAnswer(opt.id)}
+                onClick={() => selectOption(opt.id)}
                 disabled={alreadyAnswered}
+                aria-pressed={selected === opt.id}
               >
                 {opt.option_text}
               </button>
             ))}
         </div>
-        {alreadyAnswered && (
-          <p className="muted">✓ Answer submitted — move to the next question.</p>
+        {alreadyAnswered ? (
+          <p className="muted">✓ Answer submitted.</p>
+        ) : (
+          <div className="answer-actions">
+            <p className="muted">
+              {selected
+                ? 'You can still change your answer — it is locked in when you press Next.'
+                : 'Pick an option, then press Next.'}
+            </p>
+            {selected && (
+              <button type="button" className="btn-ghost small" onClick={clearSelection}>
+                Clear selection
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -261,14 +317,18 @@ export default function LiveMatch() {
           {questions.map((q, i) => (
             <span
               key={q.id}
-              className={`dot ${answeredIds.has(q.id) ? 'answered' : ''} ${i === current ? 'active' : ''}`}
-              onClick={() => { setSelected(''); setCurrent(i) }}
+              className={`dot ${isLocked(q.id) ? 'answered' : ''} ${i === current ? 'active' : ''}`}
+              onClick={() => setCurrent(i)}
               title={`Question ${i + 1}`}
             />
           ))}
         </div>
-        <button className="btn-ghost" onClick={goNext} disabled={current >= questions.length - 1}>
-          Next →
+        <button
+          className={selected && !alreadyAnswered ? 'btn-primary' : 'btn-ghost'}
+          onClick={goNext}
+          disabled={nextDisabled}
+        >
+          {nextLabel}
         </button>
       </div>
     </div>

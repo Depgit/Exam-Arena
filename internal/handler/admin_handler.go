@@ -3,23 +3,35 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/exam-arena/internal/models"
 	"github.com/exam-arena/internal/repository"
 	"github.com/exam-arena/internal/utils"
+	"github.com/exam-arena/internal/ws"
 )
 
 type AdminHandler struct {
 	questionRepo *repository.QuestionRepo
 	userRepo     *repository.UserRepo
 	matchRepo    *repository.MatchRepo
+	flagRepo     *repository.FlagRepo
+	hub          *ws.Hub
 }
 
-func NewAdminHandler(questionRepo *repository.QuestionRepo, userRepo *repository.UserRepo, matchRepo *repository.MatchRepo) *AdminHandler {
+func NewAdminHandler(
+	questionRepo *repository.QuestionRepo,
+	userRepo *repository.UserRepo,
+	matchRepo *repository.MatchRepo,
+	flagRepo *repository.FlagRepo,
+	hub *ws.Hub,
+) *AdminHandler {
 	return &AdminHandler{
 		questionRepo: questionRepo,
 		userRepo:     userRepo,
 		matchRepo:    matchRepo,
+		flagRepo:     flagRepo,
+		hub:          hub,
 	}
 }
 
@@ -111,11 +123,48 @@ func (h *AdminHandler) GetSystemStats(w http.ResponseWriter, r *http.Request) {
 	questionCount, _ := h.questionRepo.GetQuestionCount(r.Context())
 	activeMatches, _ := h.matchRepo.GetActiveMatchCount(r.Context())
 	totalMatches, _ := h.matchRepo.GetTotalMatchCount(r.Context())
+	openFlags, _ := h.flagRepo.CountOpenFlaggedQuestions(r.Context())
+
+	// Live = WebSocket connected right now. Active = used the app (login or
+	// WebSocket connect/disconnect) within the window, plus everyone live.
+	online := h.hub.OnlineUserIDs()
+	now := time.Now()
+	active24h, _ := h.userRepo.CountActiveSince(r.Context(), now.Add(-24*time.Hour), online)
+	active7d, _ := h.userRepo.CountActiveSince(r.Context(), now.Add(-7*24*time.Hour), online)
 
 	utils.JSON(w, http.StatusOK, map[string]interface{}{
-		"users":          userCount,
-		"questions":      questionCount,
-		"active_matches": activeMatches,
-		"total_matches":  totalMatches,
+		"users":                  userCount,
+		"live_users":             len(online),
+		"active_users_24h":       active24h,
+		"active_users_7d":        active7d,
+		"questions":              questionCount,
+		"active_matches":         activeMatches,
+		"total_matches":          totalMatches,
+		"open_flagged_questions": openFlags,
 	})
+}
+
+// SetCategorySortOrder godoc
+// PUT /api/v1/admin/categories/{id}/sort-order
+// Body: { "sort_order": 1 }
+//
+// Categories are listed by sort_order, then name (lower first).
+func (h *AdminHandler) SetCategorySortOrder(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SortOrder *int `json:"sort_order"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.SortOrder == nil {
+		utils.JSONError(w, http.StatusBadRequest, "sort_order is required")
+		return
+	}
+	found, err := h.questionRepo.SetCategorySortOrder(r.Context(), r.PathValue("id"), *req.SortOrder)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, "failed to update category")
+		return
+	}
+	if !found {
+		utils.JSONError(w, http.StatusNotFound, "exam category not found")
+		return
+	}
+	utils.JSON(w, http.StatusOK, map[string]interface{}{"id": r.PathValue("id"), "sort_order": *req.SortOrder})
 }

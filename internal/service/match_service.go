@@ -508,6 +508,12 @@ func (s *MatchService) endMatch(ctx context.Context, lm *LiveMatch) {
 				scoreA = 0.0
 			}
 
+			// Tied players share first place.
+			rankA, rankB := 1, 2
+			if scoreA == 0.5 {
+				rankB = 1
+			}
+
 			newRA, newRB := utils.CalculateElo(ratingA.Rating, ratingB.Rating, scoreA)
 			deltaA := newRA - ratingA.Rating
 			deltaB := newRB - ratingB.Rating
@@ -522,10 +528,17 @@ func (s *MatchService) endMatch(ctx context.Context, lm *LiveMatch) {
 				s.userRepo.UpdateRating(bgCtx, b.userID, lm.CategoryID, newRB, ratingB.MatchesPlayed+1)
 				s.userRepo.InsertRatingHistory(bgCtx, a.userID, lm.CategoryID, lm.MatchID, ratingA.Rating, newRA, deltaA)
 				s.userRepo.InsertRatingHistory(bgCtx, b.userID, lm.CategoryID, lm.MatchID, ratingB.Rating, newRB, deltaB)
-				s.matchRepo.UpdatePlayerRating(bgCtx, lm.MatchID, a.userID, newRA, deltaA, 1)
-				s.matchRepo.UpdatePlayerRating(bgCtx, lm.MatchID, b.userID, newRB, deltaB, 2)
-				s.userRepo.UpdateStatistics(bgCtx, a.userID, lm.CategoryID, scoreA >= 0.5, a.correct, a.total)
-				s.userRepo.UpdateStatistics(bgCtx, b.userID, lm.CategoryID, scoreA < 0.5, b.correct, b.total)
+				s.matchRepo.UpdatePlayerRating(bgCtx, lm.MatchID, a.userID, newRA, deltaA, rankA)
+				s.matchRepo.UpdatePlayerRating(bgCtx, lm.MatchID, b.userID, newRB, deltaB, rankB)
+				outcomeA, outcomeB := repository.OutcomeDraw, repository.OutcomeDraw
+				switch scoreA {
+				case 1.0:
+					outcomeA, outcomeB = repository.OutcomeWin, repository.OutcomeLoss
+				case 0.0:
+					outcomeA, outcomeB = repository.OutcomeLoss, repository.OutcomeWin
+				}
+				s.userRepo.UpdateStatistics(bgCtx, a.userID, lm.CategoryID, outcomeA, a.correct, a.total)
+				s.userRepo.UpdateStatistics(bgCtx, b.userID, lm.CategoryID, outcomeB, b.correct, b.total)
 				s.cache.DeletePrefix("leaderboard:")
 			}()
 		}
@@ -533,13 +546,18 @@ func (s *MatchService) endMatch(ctx context.Context, lm *LiveMatch) {
 
 	// ── Send match_end to all players ────────────────────────────────
 	playerResults := make([]map[string]interface{}, len(results))
+	rank := 0
 	for i, r := range results {
+		// results is sorted by score; equal scores share a rank.
+		if i == 0 || r.score < results[i-1].score {
+			rank = i + 1
+		}
 		elo := eloMap[r.userID]
 		playerResults[i] = map[string]interface{}{
 			"user_id":       r.userID,
 			"username":      r.username,
 			"score":         r.score,
-			"rank":          i + 1,
+			"rank":          rank,
 			"correct":       r.correct,
 			"total":         r.total,
 			"rating_before": elo.ratingBefore,
@@ -592,6 +610,11 @@ func (s *MatchService) notifyMatchFailed(pair matchmaking.PairedPlayers, reason 
 	}
 	s.hub.SendToUser(pair.PlayerA.UserID, msg)
 	s.hub.SendToUser(pair.PlayerB.UserID, msg)
+}
+
+// HasEnoughQuestions reports whether a match in categoryID can start.
+func (s *MatchService) HasEnoughQuestions(categoryID string) bool {
+	return s.questionBank.CategorySize(categoryID) >= QuestionsPerMatch
 }
 
 func liveMatchKey(matchID string) string {

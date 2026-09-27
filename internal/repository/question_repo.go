@@ -237,7 +237,9 @@ func (r *QuestionRepo) GetActiveCategoryIDs(ctx context.Context) ([]string, erro
 
 func (r *QuestionRepo) GetActiveCategories(ctx context.Context) ([]models.ExamCategory, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id, code, name, description, is_active FROM exam_categories WHERE is_active = true ORDER BY name
+		SELECT id, code, name, COALESCE(description, ''), is_active, sort_order
+		FROM exam_categories WHERE is_active = true
+		ORDER BY sort_order, name
 	`)
 	if err != nil {
 		return nil, err
@@ -247,12 +249,135 @@ func (r *QuestionRepo) GetActiveCategories(ctx context.Context) ([]models.ExamCa
 	var categories []models.ExamCategory
 	for rows.Next() {
 		var cat models.ExamCategory
-		if err := rows.Scan(&cat.ID, &cat.Code, &cat.Name, &cat.Description, &cat.IsActive); err != nil {
+		if err := rows.Scan(&cat.ID, &cat.Code, &cat.Name, &cat.Description, &cat.IsActive, &cat.SortOrder); err != nil {
 			return nil, err
 		}
 		categories = append(categories, cat)
 	}
 	return categories, nil
+}
+
+// GetActiveCategory returns one active category, or nil if the id is unknown
+// or the category is inactive.
+func (r *QuestionRepo) GetActiveCategory(ctx context.Context, id string) (*models.ExamCategory, error) {
+	cat := &models.ExamCategory{IsActive: true}
+	err := r.db.QueryRow(ctx, `
+		SELECT id, code, name FROM exam_categories WHERE id = $1 AND is_active = true
+	`, id).Scan(&cat.ID, &cat.Code, &cat.Name)
+	if err != nil {
+		if err == pgx.ErrNoRows || IsInvalidInput(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return cat, nil
+}
+
+// SetCategorySortOrder changes where a category appears in lists. It
+// reports false when the category does not exist.
+func (r *QuestionRepo) SetCategorySortOrder(ctx context.Context, id string, sortOrder int) (bool, error) {
+	tag, err := r.db.Exec(ctx, `UPDATE exam_categories SET sort_order = $2 WHERE id = $1`, id, sortOrder)
+	if err != nil {
+		if IsInvalidInput(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+// GetByIDsWithOptions loads questions with their options (including
+// is_correct), returned in the order of ids. Unknown ids are skipped.
+func (r *QuestionRepo) GetByIDsWithOptions(ctx context.Context, ids []string) ([]models.Question, error) {
+	if len(ids) == 0 {
+		return []models.Question{}, nil
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT id, exam_category_id, topic_id, question_type, difficulty,
+		       language, body, explanation, estimated_time_seconds, status, created_at
+		FROM questions WHERE id = ANY($1)
+	`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("get questions by ids: %w", err)
+	}
+	byID := make(map[string]*models.Question, len(ids))
+	for rows.Next() {
+		q := &models.Question{}
+		if err := rows.Scan(
+			&q.ID, &q.ExamCategoryID, &q.TopicID, &q.QuestionType,
+			&q.Difficulty, &q.Language, &q.Body, &q.Explanation,
+			&q.EstimatedTimeSeconds, &q.Status, &q.CreatedAt,
+		); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		byID[q.ID] = q
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	optRows, err := r.db.Query(ctx, `
+		SELECT id, question_id, option_text, is_correct, order_index
+		FROM question_options WHERE question_id = ANY($1)
+		ORDER BY question_id, order_index
+	`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("get options by question ids: %w", err)
+	}
+	defer optRows.Close()
+	for optRows.Next() {
+		var o models.QuestionOption
+		if err := optRows.Scan(&o.ID, &o.QuestionID, &o.OptionText, &o.IsCorrect, &o.OrderIndex); err != nil {
+			return nil, err
+		}
+		if q, ok := byID[o.QuestionID]; ok {
+			q.Options = append(q.Options, o)
+		}
+	}
+
+	out := make([]models.Question, 0, len(ids))
+	for _, id := range ids {
+		if q, ok := byID[id]; ok {
+			out = append(out, *q)
+		}
+	}
+	return out, nil
+}
+
+// PickDailyQuestionIDs chooses n published questions from active categories
+// in a pseudo-random order that is fixed for a given seed (the date).
+func (r *QuestionRepo) PickDailyQuestionIDs(ctx context.Context, seed string, n int) ([]string, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT q.id
+		FROM questions q
+		JOIN exam_categories c ON c.id = q.exam_category_id
+		WHERE q.status = 'published' AND c.is_active = true
+		ORDER BY md5(q.id::text || $1)
+		LIMIT $2
+	`, seed, n)
+	if err != nil {
+		return nil, fmt.Errorf("pick daily questions: %w", err)
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// Archive takes a question out of play.
+func (r *QuestionRepo) Archive(ctx context.Context, questionID string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE questions SET status = 'archived', updated_at = now() WHERE id = $1
+	`, questionID)
+	return err
 }
 
 func (r *QuestionRepo) Publish(ctx context.Context, questionID string) error {

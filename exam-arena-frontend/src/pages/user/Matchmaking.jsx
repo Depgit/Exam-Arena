@@ -63,7 +63,7 @@ export default function Matchmaking() {
 
   return (
     <div className="page">
-      <h1>Ranked Matchmaking</h1>
+      <h1>Matchmaking</h1>
       {error && <div className="alert-error">{error}</div>}
 
       {!queued ? (
@@ -81,9 +81,13 @@ export default function Matchmaking() {
             <select value={matchType} onChange={(e) => setMatchType(e.target.value)}>
               <option value="ranked">Ranked</option>
               <option value="arena">Arena</option>
-              <option value="daily_challenge">Daily Challenge</option>
             </select>
           </label>
+          <p className="muted">
+            {matchType === 'arena'
+              ? 'Arena is open to everyone: you are paired with the next waiting player, whatever their rating.'
+              : 'Ranked pairs you with a player close to your rating.'}
+          </p>
           <button className="btn-primary" onClick={handleJoin} disabled={!categoryId}>
             Join queue
           </button>
