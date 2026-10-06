@@ -23,10 +23,19 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	// LevelVar so the level can be applied after config.Load has read .env.
+	logLevel := new(slog.LevelVar) // zero value = Info
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
 	slog.SetDefault(logger)
 
 	cfg, err := config.Load()
+	// LOG_LEVEL: debug | info | warn | error (default info). Set before the
+	// error check so a config failure is still logged at the chosen level.
+	if v := os.Getenv("LOG_LEVEL"); v != "" {
+		if lerr := logLevel.UnmarshalText([]byte(v)); lerr != nil {
+			slog.Warn("ignoring invalid LOG_LEVEL", "value", v)
+		}
+	}
 	if err != nil {
 		slog.Error("config", "error", err)
 		os.Exit(1)

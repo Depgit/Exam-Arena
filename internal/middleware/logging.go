@@ -85,6 +85,23 @@ func (rw *wrappedResponseWriter) ReadFrom(r io.Reader) (int64, error) {
 	return io.Copy(rw.ResponseWriter, r)
 }
 
+// requestLogLevel picks a level per request so production logs (LOG_LEVEL
+// info) stay readable: server errors stand out, client errors are flagged,
+// and high-volume noise — platform health checks every few seconds and CORS
+// preflights — only shows up at debug.
+func requestLogLevel(r *http.Request, status int) slog.Level {
+	switch {
+	case status >= 500:
+		return slog.LevelError
+	case status >= 400:
+		return slog.LevelWarn
+	case r.URL.Path == "/health" || r.Method == http.MethodOptions:
+		return slog.LevelDebug
+	default:
+		return slog.LevelInfo
+	}
+}
+
 func Logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -92,7 +109,7 @@ func Logging(next http.Handler) http.Handler {
 
 		next.ServeHTTP(rw, r)
 
-		slog.Info("request",
+		slog.Log(r.Context(), requestLogLevel(r, rw.statusCode), "request",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rw.statusCode,
