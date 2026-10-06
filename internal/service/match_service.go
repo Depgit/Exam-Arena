@@ -170,6 +170,12 @@ type MatchService struct {
 	hub          *ws.Hub
 	cache        appCache.Cache         // general KV cache  (match states go here)
 	questionBank *appCache.QuestionBank // pre-warmed questions
+
+	// queue is needed to put a player back in the pool when the other side
+	// declines a proposed match — see pending_match.go.
+	queue *matchmaking.Queue
+	// pending holds matches that are paired but waiting on acceptance.
+	pending *pendingRegistry
 }
 
 func NewMatchService(
@@ -178,6 +184,7 @@ func NewMatchService(
 	hub *ws.Hub,
 	cache appCache.Cache,
 	questionBank *appCache.QuestionBank,
+	queue *matchmaking.Queue,
 ) *MatchService {
 	return &MatchService{
 		matchRepo:    matchRepo,
@@ -185,6 +192,8 @@ func NewMatchService(
 		hub:          hub,
 		cache:        cache,
 		questionBank: questionBank,
+		queue:        queue,
+		pending:      newPendingRegistry(),
 	}
 }
 

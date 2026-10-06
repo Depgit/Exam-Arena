@@ -97,11 +97,15 @@ func (r *DailyRepo) CompleteAttempt(ctx context.Context, attemptID string, corre
 	if err != nil {
 		return false, err
 	}
+	// Pass the JSON as a string, not []byte. Under simple_protocol (required
+	// by the Supabase pooler, see DATABASE_URL) pgx sends []byte as a bytea
+	// hex literal ('\x5b7b...'), which Postgres rejects for a JSONB column
+	// with "invalid input syntax for type json".
 	tag, err := r.db.Exec(ctx, `
 		UPDATE daily_challenge_attempts
-		SET completed_at = now(), correct = $2, total = $3, time_taken_ms = $4, answers = $5
+		SET completed_at = now(), correct = $2, total = $3, time_taken_ms = $4, answers = $5::jsonb
 		WHERE id = $1 AND completed_at IS NULL
-	`, attemptID, correct, total, timeTakenMs, raw)
+	`, attemptID, correct, total, timeTakenMs, string(raw))
 	if err != nil {
 		return false, err
 	}

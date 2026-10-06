@@ -68,17 +68,12 @@ func main() {
 	questionBank.StartAutoRefresh(bgCtx, questionRepo.GetActiveCategoryIDs)
 
 	hub := ws.NewHub()
-	// Record activity on connect and disconnect for the admin "active
-	// users" counts.
-	hub.SetPresenceHook(func(userID string, _ bool) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := userRepo.TouchLastActive(ctx, userID); err != nil {
-			slog.Warn("failed to record user activity", "user_id", userID, "error", err)
-		}
-	})
 
 	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.JWTExpiryHours)
+
+	// Created before the MatchService because the service needs it to put a
+	// player back in the pool when the other side declines a proposed match.
+	mmQueue := matchmaking.NewQueue()
 
 	matchService := service.NewMatchService(
 		matchRepo,
@@ -86,10 +81,25 @@ func main() {
 		hub,
 		memCache,
 		questionBank,
+		mmQueue,
 	)
 
-	mmQueue := matchmaking.NewQueue()
-	mmEngine := matchmaking.NewEngine(mmQueue, matchService.StartMatchForPair)
+	hub.SetPresenceHook(func(userID string, online bool) {
+		// Record activity on connect and disconnect for the admin "active
+		// users" counts.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := userRepo.TouchLastActive(ctx, userID); err != nil {
+			slog.Warn("failed to record user activity", "user_id", userID, "error", err)
+		}
+		// A player who closes the tab mid-acceptance should not make their
+		// opponent wait out the whole 30-second window.
+		matchService.HandlePresenceChange(userID, online)
+	})
+
+	// The engine pairs players; ProposeMatch offers the match to both and
+	// only calls StartMatchForPair once they have accepted.
+	mmEngine := matchmaking.NewEngine(mmQueue, matchService.ProposeMatch)
 
 	mmService := service.NewMatchmakingService(matchRepo, userRepo, mmQueue)
 	if err := mmService.RestoreFromDB(context.Background()); err != nil {

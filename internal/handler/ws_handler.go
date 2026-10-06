@@ -43,6 +43,8 @@ func NewWSHandler(hub *ws.Hub, jwtSecret string, matchService *service.MatchServ
 // function that processes it. Add new types here as the game grows.
 func (h *WSHandler) registerHandlers() {
 	h.hub.RegisterHandler("submit_answer", h.handleSubmitAnswer)
+	h.hub.RegisterHandler("accept_match", h.handleAcceptMatch)
+	h.hub.RegisterHandler("decline_match", h.handleDeclineMatch)
 	h.hub.RegisterHandler("ping", h.handlePing)
 }
 
@@ -168,6 +170,64 @@ func (h *WSHandler) handleSubmitAnswer(client *ws.Client, payload json.RawMessag
 
 	// No explicit ACK — the MatchService broadcasts a "score_update"
 	// message to ALL players in the match, including the sender.
+}
+
+// handleAcceptMatch accepts a proposed match during the 30-second
+// acceptance window (game_rules.md §4).
+//
+// Expected payload:
+//
+//	{ "pending_id": "..." }
+//
+// The MatchService re-checks that the sender is actually one of the two
+// players before recording anything, so a guessed or copied pending_id gets
+// a player nowhere. The match starts once both sides have accepted.
+func (h *WSHandler) handleAcceptMatch(client *ws.Client, payload json.RawMessage) {
+	pendingID, ok := decodePendingID(client, payload)
+	if !ok {
+		return
+	}
+
+	if err := h.matchService.AcceptMatch(client.UserID(), pendingID); err != nil {
+		slog.Warn("match accept failed",
+			"user_id", client.UserID(), "pending_id", pendingID, "error", err)
+		client.SendJSON(ws.Message{
+			Type:    "error",
+			Payload: map[string]interface{}{"message": err.Error()},
+		})
+	}
+}
+
+// handleDeclineMatch turns down a proposed match. The opponent is put back
+// into the matchmaking queue; the decliner is not.
+func (h *WSHandler) handleDeclineMatch(client *ws.Client, payload json.RawMessage) {
+	pendingID, ok := decodePendingID(client, payload)
+	if !ok {
+		return
+	}
+
+	if err := h.matchService.DeclineMatch(client.UserID(), pendingID); err != nil {
+		// A decline arriving just after the window closed is routine, not an
+		// error worth putting in front of the player.
+		slog.Info("match decline ignored",
+			"user_id", client.UserID(), "pending_id", pendingID, "reason", err)
+	}
+}
+
+// decodePendingID pulls the pending match id out of an accept/decline
+// payload, replying with an error frame if it is missing or malformed.
+func decodePendingID(client *ws.Client, payload json.RawMessage) (string, bool) {
+	var data struct {
+		PendingID string `json:"pending_id"`
+	}
+	if err := json.Unmarshal(payload, &data); err != nil || data.PendingID == "" {
+		client.SendJSON(ws.Message{
+			Type:    "error",
+			Payload: map[string]interface{}{"message": "pending_id is required"},
+		})
+		return "", false
+	}
+	return data.PendingID, true
 }
 
 // handlePing responds with a pong so the client can measure latency.

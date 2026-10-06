@@ -25,8 +25,10 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		ServerHost:  getEnv("SERVER_HOST", "0.0.0.0"),
-		ServerPort:  getEnv("SERVER_PORT", "8080"),
+		ServerHost: getEnv("SERVER_HOST", "0.0.0.0"),
+		// Render (and most PaaS hosts) inject PORT and route traffic to it;
+		// SERVER_PORT still wins when set explicitly.
+		ServerPort:  getEnv("SERVER_PORT", getEnv("PORT", "8080")),
 		Environment: getEnv("ENVIRONMENT", "development"),
 		DatabaseURL: getEnv("DATABASE_URL", ""),
 		JWTSecret:   getEnv("JWT_SECRET", ""),

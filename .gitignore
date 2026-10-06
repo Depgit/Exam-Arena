@@ -1,6 +1,25 @@
+# Build output
 bin
+
+# Local docs & data (kept out of the repo on purpose)
 docs
+question_bank.json
+
+# Local env — set secrets in the Render dashboard instead
+.env
+.env.*
+!.env.example
 backend/.env
 exam-arena-frontend/.env
-.env
-question_bank.json
+
+# Tooling
+.claude/
+
+# Logs
+*.log
+
+# OS / editor junk
+.DS_Store
+__MACOSX/
+.idea/
+*.swp
