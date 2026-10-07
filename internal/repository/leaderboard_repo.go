@@ -21,7 +21,7 @@ func (r *LeaderboardRepo) GetLeaderboard(ctx context.Context, categoryID string,
 		       ur.rating, ur.matches_played,
 		       ROW_NUMBER() OVER (ORDER BY ur.rating DESC) AS rank
 		FROM user_ratings ur
-		JOIN users u ON u.id = ur.user_id AND u.deleted_at IS NULL AND NOT u.is_guest
+		JOIN users u ON u.id = ur.user_id AND u.deleted_at IS NULL AND NOT u.is_guest AND NOT u.is_bot
 		WHERE ur.exam_category_id = $1
 		ORDER BY ur.rating DESC
 		LIMIT $2 OFFSET $3

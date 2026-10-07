@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/exam-arena/internal/middleware"
@@ -139,6 +141,31 @@ func (h *MatchHandler) CreateFriendMatch(w http.ResponseWriter, r *http.Request)
 //
 // When this player joins, the room is full and the match starts.
 // Both players receive a "match_start" WebSocket message.
+// PlayBot starts an unrated match against a bot, for when nobody else is
+// searching. The match itself arrives over WebSocket as match_start.
+//
+//	POST /api/v1/matches/bot  {"exam_category_id": "..."}
+func (h *MatchHandler) PlayBot(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ExamCategoryID string `json:"exam_category_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ExamCategoryID == "" {
+		utils.JSONError(w, http.StatusBadRequest, "exam_category_id is required")
+		return
+	}
+	matchID, err := h.matchService.StartBotMatch(r.Context(), middleware.GetUserID(r), middleware.GetUsername(r), req.ExamCategoryID)
+	if errors.Is(err, service.ErrNotEnoughQuestions) {
+		utils.JSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err != nil {
+		slog.Error("bot match failed", "error", err)
+		utils.JSONError(w, http.StatusInternalServerError, "could not start a bot match")
+		return
+	}
+	utils.JSON(w, http.StatusCreated, map[string]interface{}{"match_id": matchID})
+}
+
 func (h *MatchHandler) JoinFriendMatch(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	username := middleware.GetUsername(r)

@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"github.com/exam-arena/internal/models"
 	"net/http"
+	"sync"
 
 	"github.com/exam-arena/internal/repository"
 	"github.com/exam-arena/internal/service"
@@ -27,13 +29,21 @@ func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.userRepo.GetByID(r.Context(), userID)
+	// Independent reads: run them together (one database round trip, not two).
+	var (
+		user    *models.User
+		err     error
+		ratings []models.UserRating
+		wg      sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() { defer wg.Done(); user, err = h.userRepo.GetByID(r.Context(), userID) }()
+	go func() { defer wg.Done(); ratings, _ = h.userRepo.GetRatings(r.Context(), userID) }()
+	wg.Wait()
 	if err != nil || user == nil {
 		utils.JSONError(w, http.StatusNotFound, "user not found")
 		return
 	}
-
-	ratings, _ := h.userRepo.GetRatings(r.Context(), userID)
 
 	utils.JSON(w, http.StatusOK, map[string]interface{}{
 		"user":    user,

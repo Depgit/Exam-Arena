@@ -48,6 +48,10 @@ func (s *AuthService) Register(ctx context.Context, req RegisterRequest) (*AuthR
 	if len(req.Username) < 3 || len(req.Username) > 30 {
 		return nil, errors.New("username must be between 3 and 30 characters")
 	}
+	// Reserved prefixes for system accounts (bots, demo guests).
+	if lower := strings.ToLower(req.Username); strings.HasPrefix(lower, "bot.") || strings.HasPrefix(lower, "guest_") {
+		return nil, errors.New("that username is reserved")
+	}
 	if len(req.Password) < 8 {
 		return nil, errors.New("password must be at least 8 characters")
 	}

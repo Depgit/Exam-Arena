@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/exam-arena/internal/models"
 	"github.com/jackc/pgx/v5"
@@ -11,7 +13,16 @@ import (
 
 type QuestionRepo struct {
 	db *pgxpool.Pool
+
+	// Active categories are read on almost every page but change only when
+	// an admin reorders them (or a migration toggles one), so keep them for
+	// a short while instead of a database round trip per request.
+	catMu      sync.Mutex
+	catCached  []models.ExamCategory
+	catFetched time.Time
 }
+
+const categoryCacheTTL = time.Minute
 
 func NewQuestionRepo(db *pgxpool.Pool) *QuestionRepo {
 	return &QuestionRepo{db: db}
@@ -238,6 +249,31 @@ func (r *QuestionRepo) GetActiveCategoryIDs(ctx context.Context) ([]string, erro
 }
 
 func (r *QuestionRepo) GetActiveCategories(ctx context.Context) ([]models.ExamCategory, error) {
+	r.catMu.Lock()
+	if r.catCached != nil && time.Since(r.catFetched) < categoryCacheTTL {
+		out := append([]models.ExamCategory(nil), r.catCached...)
+		r.catMu.Unlock()
+		return out, nil
+	}
+	r.catMu.Unlock()
+
+	categories, err := r.loadActiveCategories(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.catMu.Lock()
+	r.catCached, r.catFetched = categories, time.Now()
+	r.catMu.Unlock()
+	return append([]models.ExamCategory(nil), categories...), nil
+}
+
+func (r *QuestionRepo) invalidateCategories() {
+	r.catMu.Lock()
+	r.catCached = nil
+	r.catMu.Unlock()
+}
+
+func (r *QuestionRepo) loadActiveCategories(ctx context.Context) ([]models.ExamCategory, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT id, code, name, COALESCE(description, ''), is_active, sort_order
 		FROM exam_categories WHERE is_active = true
@@ -279,6 +315,7 @@ func (r *QuestionRepo) GetActiveCategory(ctx context.Context, id string) (*model
 // reports false when the category does not exist.
 func (r *QuestionRepo) SetCategorySortOrder(ctx context.Context, id string, sortOrder int) (bool, error) {
 	tag, err := r.db.Exec(ctx, `UPDATE exam_categories SET sort_order = $2 WHERE id = $1`, id, sortOrder)
+	r.invalidateCategories()
 	if err != nil {
 		if IsInvalidInput(err) {
 			return false, nil

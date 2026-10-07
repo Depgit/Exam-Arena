@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/exam-arena/internal/models"
@@ -33,6 +34,14 @@ type DailyService struct {
 	dailyRepo    *repository.DailyRepo
 	questionRepo *repository.QuestionRepo
 	now          func() time.Time
+
+	// A day's challenge (and its questions) never changes once created, so
+	// keep the current one in memory instead of re-reading it on every
+	// lobby load. Each saved query is a full round trip to the database.
+	cacheMu        sync.Mutex
+	cacheDay       string
+	cacheChallenge *models.DailyChallenge
+	cacheQuestions []models.Question
 }
 
 func NewDailyService(dailyRepo *repository.DailyRepo, questionRepo *repository.QuestionRepo) *DailyService {
@@ -54,6 +63,55 @@ func nextReset(now time.Time) time.Time {
 
 // ensureChallenge returns today's challenge, fixing its question set on
 // first use.
+// challenge returns the day's challenge, creating it if needed, from memory
+// when possible.
+func (s *DailyService) challenge(ctx context.Context, date time.Time) (*models.DailyChallenge, error) {
+	day := date.Format("2006-01-02")
+	s.cacheMu.Lock()
+	if s.cacheDay == day && s.cacheChallenge != nil {
+		c := s.cacheChallenge
+		s.cacheMu.Unlock()
+		return c, nil
+	}
+	s.cacheMu.Unlock()
+
+	c, err := s.ensureChallenge(ctx, date)
+	if err != nil {
+		return nil, err
+	}
+	s.cacheMu.Lock()
+	if s.cacheDay != day {
+		s.cacheQuestions = nil
+	}
+	s.cacheDay, s.cacheChallenge = day, c
+	s.cacheMu.Unlock()
+	return c, nil
+}
+
+// challengeQuestions returns the challenge's questions (with answers),
+// from memory when possible.
+func (s *DailyService) challengeQuestions(ctx context.Context, c *models.DailyChallenge) ([]models.Question, error) {
+	day := c.Date.Format("2006-01-02")
+	s.cacheMu.Lock()
+	if s.cacheDay == day && s.cacheQuestions != nil {
+		qs := s.cacheQuestions
+		s.cacheMu.Unlock()
+		return qs, nil
+	}
+	s.cacheMu.Unlock()
+
+	qs, err := s.questionRepo.GetByIDsWithOptions(ctx, c.QuestionIDs)
+	if err != nil {
+		return nil, err
+	}
+	s.cacheMu.Lock()
+	if s.cacheDay == day {
+		s.cacheQuestions = qs
+	}
+	s.cacheMu.Unlock()
+	return qs, nil
+}
+
 func (s *DailyService) ensureChallenge(ctx context.Context, date time.Time) (*models.DailyChallenge, error) {
 	c, err := s.dailyRepo.GetChallenge(ctx, date)
 	if err != nil || c != nil {
@@ -130,7 +188,7 @@ func (s *DailyService) Overview(ctx context.Context, userID string) (*DailyOverv
 		Leaderboard:      []models.DailyEntry{},
 	}
 
-	c, err := s.ensureChallenge(ctx, date)
+	c, err := s.challenge(ctx, date)
 	if errors.Is(err, ErrNoDailyChallenge) {
 		return ov, nil
 	}
@@ -141,9 +199,28 @@ func (s *DailyService) Overview(ctx context.Context, userID string) (*DailyOverv
 	ov.QuestionCount = len(c.QuestionIDs)
 	ov.TimeLimitSeconds = c.TimeLimitSeconds
 
-	a, err := s.dailyRepo.GetAttempt(ctx, date, userID)
-	if err != nil {
-		return nil, err
+	// These three reads are independent: run them at the same time, so the
+	// lobby waits for one database round trip instead of three.
+	var (
+		wg                       sync.WaitGroup
+		a                        *models.DailyAttempt
+		errA, errCount, errBoard error
+	)
+	wg.Add(3)
+	go func() { defer wg.Done(); a, errA = s.dailyRepo.GetAttempt(ctx, date, userID) }()
+	go func() { defer wg.Done(); ov.Participants, errCount = s.dailyRepo.CountParticipants(ctx, date) }()
+	go func() {
+		defer wg.Done()
+		ov.Leaderboard, errBoard = s.dailyRepo.Leaderboard(ctx, date, dailyLeaderboardSize)
+	}()
+	wg.Wait()
+	for _, e := range []error{errA, errCount, errBoard} {
+		if e != nil {
+			return nil, e
+		}
+	}
+	if ov.Leaderboard == nil {
+		ov.Leaderboard = []models.DailyEntry{}
 	}
 	if a != nil {
 		completed, err := s.expireIfOverdue(ctx, a, c)
@@ -170,13 +247,6 @@ func (s *DailyService) Overview(ctx context.Context, userID string) (*DailyOverv
 		}
 		ov.Attempt = view
 	}
-
-	if ov.Participants, err = s.dailyRepo.CountParticipants(ctx, date); err != nil {
-		return nil, err
-	}
-	if ov.Leaderboard, err = s.dailyRepo.Leaderboard(ctx, date, dailyLeaderboardSize); err != nil {
-		return nil, err
-	}
 	return ov, nil
 }
 
@@ -195,7 +265,7 @@ type DailyStart struct {
 // without their answers. The clock starts at the first call.
 func (s *DailyService) Start(ctx context.Context, userID string) (*DailyStart, error) {
 	date := challengeDate(s.now())
-	c, err := s.ensureChallenge(ctx, date)
+	c, err := s.challenge(ctx, date)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +282,7 @@ func (s *DailyService) Start(ctx context.Context, userID string) (*DailyStart, e
 		return nil, ErrDailyAlreadyPlayed
 	}
 
-	questions, err := s.questionRepo.GetByIDsWithOptions(ctx, c.QuestionIDs)
+	questions, err := s.challengeQuestions(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +355,7 @@ func (s *DailyService) Submit(ctx context.Context, userID string, answers []Dail
 		elapsed = limit
 	}
 
-	questions, err := s.questionRepo.GetByIDsWithOptions(ctx, c.QuestionIDs)
+	questions, err := s.challengeQuestions(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -358,7 +428,7 @@ func optionText(q models.Question, optionID string) string {
 }
 
 func (s *DailyService) review(ctx context.Context, c *models.DailyChallenge, records []models.DailyAnswerRecord) ([]DailyReviewItem, error) {
-	questions, err := s.questionRepo.GetByIDsWithOptions(ctx, c.QuestionIDs)
+	questions, err := s.challengeQuestions(ctx, c)
 	if err != nil {
 		return nil, fmt.Errorf("load daily review: %w", err)
 	}

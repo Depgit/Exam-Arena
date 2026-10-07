@@ -199,7 +199,7 @@ func (r *QuestionRepo) InsertGenerated(ctx context.Context, categoryID, difficul
 func (r *QuestionRepo) CountPlayers(ctx context.Context) (int, error) {
 	var n int
 	err := r.db.QueryRow(ctx,
-		`SELECT count(*) FROM users WHERE NOT is_guest AND role <> 'admin' AND deleted_at IS NULL`).Scan(&n)
+		`SELECT count(*) FROM users WHERE NOT is_guest AND NOT is_bot AND role <> 'admin' AND deleted_at IS NULL`).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("count players: %w", err)
 	}

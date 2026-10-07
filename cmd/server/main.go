@@ -202,6 +202,7 @@ func main() {
 	mux.HandleFunc("DELETE /api/v1/matches/queue", middleware.Auth(cfg.JWTSecret, matchHandler.LeaveQueue))
 	mux.HandleFunc("GET /api/v1/matches/{id}", middleware.Auth(cfg.JWTSecret, matchHandler.GetMatch))
 	mux.HandleFunc("POST /api/v1/matches/friend", middleware.Auth(cfg.JWTSecret, matchHandler.CreateFriendMatch))
+	mux.HandleFunc("POST /api/v1/matches/bot", middleware.Auth(cfg.JWTSecret, matchHandler.PlayBot))
 	mux.HandleFunc("POST /api/v1/matches/friend/join", middleware.Auth(cfg.JWTSecret, matchHandler.JoinFriendMatch))
 	mux.HandleFunc("GET /api/v1/matches/queue/stats", middleware.Auth(cfg.JWTSecret, matchHandler.QueueStats))
 

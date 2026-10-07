@@ -39,7 +39,10 @@ type LiveMatch struct {
 	PlayerStates map[string]*LivePlayer // userID → state; key set is fixed at creation, values change under mu
 	StartedAt    time.Time
 	TimerSeconds int
-	cancelTimer  context.CancelFunc
+	// BotUserID is set for a match against a bot (bot.go). Such matches are
+	// unrated: endMatch skips rating and win/loss updates.
+	BotUserID   string
+	cancelTimer context.CancelFunc
 
 	// mu guards every LivePlayer's Score and AnsweredIDs. The hub goroutine
 	// mutates them in SubmitAnswer while HTTP handlers (GetMatchDetails),
@@ -513,7 +516,7 @@ func (s *MatchService) endMatch(ctx context.Context, lm *LiveMatch) {
 	}
 	eloMap := make(map[string]eloResult, len(results))
 
-	if len(results) == 2 {
+	if len(results) == 2 && lm.BotUserID == "" {
 		a, b := results[0], results[1]
 
 		ratingA, _ := s.userRepo.GetRating(ctx, a.userID, lm.CategoryID)
@@ -574,17 +577,20 @@ func (s *MatchService) endMatch(ctx context.Context, lm *LiveMatch) {
 		if i == 0 || r.score < results[i-1].score {
 			rank = i + 1
 		}
-		elo := eloMap[r.userID]
 		playerResults[i] = map[string]interface{}{
-			"user_id":       r.userID,
-			"username":      r.username,
-			"score":         r.score,
-			"rank":          rank,
-			"correct":       r.correct,
-			"total":         r.total,
-			"rating_before": elo.ratingBefore,
-			"rating_after":  elo.ratingAfter,
-			"elo_delta":     elo.delta,
+			"user_id":  r.userID,
+			"username": r.username,
+			"score":    r.score,
+			"rank":     rank,
+			"correct":  r.correct,
+			"total":    r.total,
+		}
+		// Unrated matches (bots) send no rating fields, so the client shows
+		// no rating change instead of a misleading "+0".
+		if elo, rated := eloMap[r.userID]; rated {
+			playerResults[i]["rating_before"] = elo.ratingBefore
+			playerResults[i]["rating_after"] = elo.ratingAfter
+			playerResults[i]["elo_delta"] = elo.delta
 		}
 	}
 

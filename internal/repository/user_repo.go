@@ -53,6 +53,27 @@ func (r *UserRepo) CreateGuest(ctx context.Context, username, email, passwordHas
 	return user, nil
 }
 
+// EnsureBot returns the id of the bot account with this username, creating
+// it if needed. Bots can't log in: their password hash is of a random
+// secret that is immediately discarded.
+func (r *UserRepo) EnsureBot(ctx context.Context, username, displayName, passwordHash string) (string, error) {
+	if _, err := r.db.Exec(ctx, `
+		INSERT INTO users (username, email, password_hash, display_name, is_bot)
+		VALUES ($1, $1 || '@bots.invalid', $2, $3, true)
+		ON CONFLICT DO NOTHING
+	`, username, passwordHash, displayName); err != nil {
+		return "", fmt.Errorf("create bot %s: %w", username, err)
+	}
+	// Only ever use a row that is actually a bot: never take over a real
+	// account that happens to have this username.
+	var id string
+	err := r.db.QueryRow(ctx, `SELECT id FROM users WHERE username = $1 AND is_bot`, username).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("bot %s unavailable: %w", username, err)
+	}
+	return id, nil
+}
+
 // DeleteStaleGuests removes guest accounts older than maxAge that left
 // nothing other players depend on. Their own data (ratings, stats, practice,
 // friendships, daily attempts…) cascades away. Guests who played a match or
