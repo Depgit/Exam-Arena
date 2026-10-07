@@ -222,7 +222,8 @@ func (s *DailyService) Start(ctx context.Context, userID string) (*DailyStart, e
 		Deadline:         deadlineOf(a, c),
 		ServerTime:       s.now(),
 		TimeLimitSeconds: c.TimeLimitSeconds,
-		Questions:        toPlayerQuestions(questions),
+		// Keyed by attempt: resuming keeps the order, each player gets their own.
+		Questions: toPlayerQuestions(questions, "daily:"+a.ID),
 	}, nil
 }
 

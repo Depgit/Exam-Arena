@@ -17,15 +17,23 @@ func NewQuestionRepo(db *pgxpool.Pool) *QuestionRepo {
 	return &QuestionRepo{db: db}
 }
 
-func (r *QuestionRepo) GetRandomQuestions(ctx context.Context, categoryID string, count int) ([]models.Question, error) {
+// GetRandomQuestions picks count random published questions for practice.
+// difficulty ("easy" | "medium" | "hard") narrows the pick; nil or "" means
+// mixed.
+func (r *QuestionRepo) GetRandomQuestions(ctx context.Context, categoryID string, difficulty *string, count int) ([]models.Question, error) {
+	diff := ""
+	if difficulty != nil {
+		diff = *difficulty
+	}
 	rows, err := r.db.Query(ctx, `
 		SELECT id, exam_category_id, topic_id, question_type, difficulty,
 		       language, body, explanation, estimated_time_seconds, status, created_at
 		FROM questions
 		WHERE exam_category_id = $1 AND status = 'published'
+		  AND ($2 = '' OR difficulty::text = $2)
 		ORDER BY RANDOM()
-		LIMIT $2
-	`, categoryID, count)
+		LIMIT $3
+	`, categoryID, diff, count)
 	if err != nil {
 		return nil, fmt.Errorf("get random questions: %w", err)
 	}
@@ -43,17 +51,45 @@ func (r *QuestionRepo) GetRandomQuestions(ctx context.Context, categoryID string
 		}
 		questions = append(questions, q)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return questions, r.attachOptions(ctx, questions)
+}
 
-	// Load options for each question
+// attachOptions loads the options for every question in one query (no N+1).
+func (r *QuestionRepo) attachOptions(ctx context.Context, questions []models.Question) error {
+	if len(questions) == 0 {
+		return nil
+	}
+	qIDs := make([]string, len(questions))
+	qMap := make(map[string]*models.Question, len(questions))
 	for i := range questions {
-		options, err := r.GetOptions(ctx, questions[i].ID)
-		if err != nil {
-			return nil, err
-		}
-		questions[i].Options = options
+		qIDs[i] = questions[i].ID
+		qMap[questions[i].ID] = &questions[i]
 	}
 
-	return questions, nil
+	optRows, err := r.db.Query(ctx, `
+		SELECT id, question_id, option_text, is_correct, order_index
+		FROM   question_options
+		WHERE  question_id = ANY($1)
+		ORDER  BY question_id, order_index
+	`, qIDs)
+	if err != nil {
+		return fmt.Errorf("get options bulk: %w", err)
+	}
+	defer optRows.Close()
+
+	for optRows.Next() {
+		var o models.QuestionOption
+		if err := optRows.Scan(&o.ID, &o.QuestionID, &o.OptionText, &o.IsCorrect, &o.OrderIndex); err != nil {
+			return err
+		}
+		if q, ok := qMap[o.QuestionID]; ok {
+			q.Options = append(q.Options, o)
+		}
+	}
+	return optRows.Err()
 }
 
 func (r *QuestionRepo) GetByID(ctx context.Context, id string) (*models.Question, error) {
@@ -173,44 +209,10 @@ func (r *QuestionRepo) GetAllPublished(ctx context.Context, categoryID string) (
 		questions = append(questions, q)
 	}
 
-	// Bulk-load all options for these questions in ONE query (no N+1)
-	if len(questions) == 0 {
-		return questions, nil
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
-
-	qIDs := make([]string, len(questions))
-	for i, q := range questions {
-		qIDs[i] = q.ID
-	}
-
-	optRows, err := r.db.Query(ctx, `
-		SELECT id, question_id, option_text, is_correct, order_index
-		FROM   question_options
-		WHERE  question_id = ANY($1)
-		ORDER  BY question_id, order_index
-	`, qIDs)
-	if err != nil {
-		return nil, fmt.Errorf("get options bulk: %w", err)
-	}
-	defer optRows.Close()
-
-	// Index questions by ID for O(1) lookup while attaching options
-	qMap := make(map[string]*models.Question, len(questions))
-	for i := range questions {
-		qMap[questions[i].ID] = &questions[i]
-	}
-
-	for optRows.Next() {
-		var o models.QuestionOption
-		if err := optRows.Scan(&o.ID, &o.QuestionID, &o.OptionText, &o.IsCorrect, &o.OrderIndex); err != nil {
-			return nil, err
-		}
-		if q, ok := qMap[o.QuestionID]; ok {
-			q.Options = append(q.Options, o)
-		}
-	}
-
-	return questions, nil
+	return questions, r.attachOptions(ctx, questions)
 }
 
 // GetActiveCategoryIDs returns the UUIDs of all active exam categories.

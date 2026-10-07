@@ -37,6 +37,14 @@ func (s *PracticeService) StartSession(ctx context.Context, userID string, req S
 		req.QuestionCount = 10
 	}
 
+	if req.Difficulty != nil {
+		switch *req.Difficulty {
+		case "", "easy", "medium", "hard":
+		default:
+			return nil, fmt.Errorf("invalid difficulty %q", *req.Difficulty)
+		}
+	}
+
 	// Create session
 	session, err := s.practiceRepo.CreateSession(ctx, userID, req.ExamCategoryID, req.TopicID, req.Difficulty, req.QuestionCount)
 	if err != nil {
@@ -44,7 +52,7 @@ func (s *PracticeService) StartSession(ctx context.Context, userID string, req S
 	}
 
 	// Get random questions
-	questions, err := s.questionRepo.GetRandomQuestions(ctx, req.ExamCategoryID, req.QuestionCount)
+	questions, err := s.questionRepo.GetRandomQuestions(ctx, req.ExamCategoryID, req.Difficulty, req.QuestionCount)
 	if err != nil {
 		return nil, fmt.Errorf("get questions: %w", err)
 	}
@@ -56,14 +64,7 @@ func (s *PracticeService) StartSession(ctx context.Context, userID string, req S
 			return nil, err
 		}
 
-		opts := make([]models.OptionForPlayer, len(q.Options))
-		for j, o := range q.Options {
-			opts[j] = models.OptionForPlayer{
-				ID:         o.ID,
-				OptionText: o.OptionText,
-				OrderIndex: o.OrderIndex,
-			}
-		}
+		opts := playerOptions(q, "practice:"+session.ID)
 		playerQuestions[i] = models.QuestionForPlayer{
 			ID:                   q.ID,
 			QuestionType:         q.QuestionType,

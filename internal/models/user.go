@@ -13,6 +13,7 @@ type User struct {
 	PreferredLanguage string     `json:"preferred_language"`
 	Role              string     `json:"role"`
 	Status            string     `json:"status"`
+	IsGuest           bool       `json:"is_guest"` // throwaway demo account
 	EmailVerifiedAt   *time.Time `json:"email_verified_at"`
 	LastLoginAt       *time.Time `json:"last_login_at"`
 	CreatedAt         time.Time  `json:"created_at"`

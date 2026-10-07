@@ -34,17 +34,55 @@ func (r *UserRepo) Create(ctx context.Context, username, email, passwordHash str
 	return user, nil
 }
 
+// CreateGuest inserts a throwaway demo account. The password hash is of a
+// random secret nobody knows, so the account can only be used through the
+// token handed out when it was created.
+func (r *UserRepo) CreateGuest(ctx context.Context, username, email, passwordHash, displayName string) (*models.User, error) {
+	user := &models.User{}
+	err := r.db.QueryRow(ctx, `
+		INSERT INTO users (username, email, password_hash, display_name, is_guest)
+		VALUES ($1, $2, $3, $4, true)
+		RETURNING id, username, email, display_name, role, status, is_guest, created_at, updated_at
+	`, username, email, passwordHash, displayName).Scan(
+		&user.ID, &user.Username, &user.Email, &user.DisplayName,
+		&user.Role, &user.Status, &user.IsGuest, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create guest: %w", err)
+	}
+	return user, nil
+}
+
+// DeleteStaleGuests removes guest accounts older than maxAge that left
+// nothing other players depend on. Their own data (ratings, stats, practice,
+// friendships, daily attempts…) cascades away. Guests who played a match or
+// filed a report are kept so opponents' history and moderation stay intact.
+func (r *UserRepo) DeleteStaleGuests(ctx context.Context, maxAge time.Duration) (int64, error) {
+	tag, err := r.db.Exec(ctx, `
+		DELETE FROM users u
+		WHERE u.is_guest AND u.created_at < now() - make_interval(secs => $1)
+		  AND NOT EXISTS (SELECT 1 FROM match_players mp WHERE mp.user_id = u.id)
+		  AND NOT EXISTS (SELECT 1 FROM match_answers ma WHERE ma.user_id = u.id)
+		  AND NOT EXISTS (SELECT 1 FROM rating_history rh WHERE rh.user_id = u.id)
+		  AND NOT EXISTS (SELECT 1 FROM reports rp WHERE rp.reporter_id = u.id)
+	`, maxAge.Seconds())
+	if err != nil {
+		return 0, fmt.Errorf("delete stale guests: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 func (r *UserRepo) GetByID(ctx context.Context, id string) (*models.User, error) {
 	user := &models.User{}
 	err := r.db.QueryRow(ctx, `
 		SELECT id, username, email, password_hash, display_name, avatar_url,
-		       country_code, preferred_language, role, status,
+		       country_code, preferred_language, role, status, is_guest,
 		       email_verified_at, last_login_at, created_at, updated_at
 		FROM users WHERE id = $1 AND deleted_at IS NULL
 	`, id).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash,
 		&user.DisplayName, &user.AvatarURL, &user.CountryCode,
-		&user.PreferredLanguage, &user.Role, &user.Status,
+		&user.PreferredLanguage, &user.Role, &user.Status, &user.IsGuest,
 		&user.EmailVerifiedAt, &user.LastLoginAt, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {

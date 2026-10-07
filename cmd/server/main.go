@@ -76,6 +76,34 @@ func main() {
 
 	questionBank.StartAutoRefresh(bgCtx, questionRepo.GetActiveCategoryIDs)
 
+	// Generated questions: fills/rotates a pool in the background, then
+	// refreshes the bank above. Off unless QUESTION_GEN_ENABLED=true.
+	questionPool := service.NewQuestionPool(questionRepo, questionBank, service.QuestionPoolConfig{
+		Enabled:     cfg.QuestionGenEnabled,
+		PoolSize:    cfg.QuestionGenPoolSize,
+		RotateEvery: cfg.QuestionGenRotateEvery,
+	})
+	questionPool.Start(bgCtx)
+
+	// Remove old demo (guest) accounts that nobody else depends on.
+	go func() {
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for {
+			n, err := userRepo.DeleteStaleGuests(bgCtx, 72*time.Hour)
+			if err != nil {
+				slog.Warn("guest cleanup failed", "error", err)
+			} else if n > 0 {
+				slog.Info("removed stale guest accounts", "count", n)
+			}
+			select {
+			case <-bgCtx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+
 	hub := ws.NewHub()
 
 	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.JWTExpiryHours)
@@ -160,6 +188,7 @@ func main() {
 	// Auth
 	mux.HandleFunc("POST /api/v1/auth/register", authHandler.Register)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
+	mux.HandleFunc("POST /api/v1/auth/guest", authHandler.Guest)
 	mux.HandleFunc("GET /api/v1/auth/me", middleware.Auth(cfg.JWTSecret, authHandler.Me))
 
 	// Users
@@ -215,6 +244,9 @@ func main() {
 	mux.HandleFunc("PUT /api/v1/admin/questions/{id}/publish", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", adminHandler.PublishQuestion)))
 	mux.HandleFunc("GET /api/v1/admin/stats", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", adminHandler.GetSystemStats)))
 	mux.HandleFunc("PUT /api/v1/admin/categories/{id}/sort-order", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", adminHandler.SetCategorySortOrder)))
+	generatorHandler := handler.NewGeneratorHandler(questionPool)
+	mux.HandleFunc("GET /api/v1/admin/generator/preview", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", generatorHandler.Preview)))
+	mux.HandleFunc("POST /api/v1/admin/generator/rotate", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", generatorHandler.Rotate)))
 	mux.HandleFunc("GET /api/v1/admin/flags", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", flagHandler.ListFlags)))
 	mux.HandleFunc("PUT /api/v1/admin/flags/{questionId}", middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", flagHandler.ReviewFlags)))
 

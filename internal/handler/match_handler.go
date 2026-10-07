@@ -84,7 +84,7 @@ func (h *MatchHandler) GetMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	details, err := h.matchService.GetMatchDetails(r.Context(), matchID)
+	details, err := h.matchService.GetMatchDetails(r.Context(), matchID, middleware.GetUserID(r))
 	if err != nil {
 		utils.JSONError(w, http.StatusNotFound, err.Error())
 		return

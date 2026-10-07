@@ -293,27 +293,25 @@ func (s *MatchService) StartMatchForPair(ctx context.Context, pair matchmaking.P
 	// Store in cache — key: "live_match:<matchID>"
 	s.cache.Set(liveMatchKey(match.ID), liveMatch, 35*time.Minute)
 
-	// ── Step 5: Build player-safe question list (no correct answers) ─
-	playerQuestions := toPlayerQuestions(questions)
-
-	// ── Step 6: Send match_start to both players ─────────────────────
+	// ── Steps 5–6: Send match_start to both players ──────────────────
+	// Each player gets the questions without answers, with options in
+	// their own shuffled order.
 	playerInfos := []map[string]interface{}{
 		{"user_id": pair.PlayerA.UserID, "username": pair.PlayerA.Username, "rating": pair.PlayerA.Rating},
 		{"user_id": pair.PlayerB.UserID, "username": pair.PlayerB.Username, "rating": pair.PlayerB.Rating},
 	}
 
-	startMsg := ws.Message{
-		Type: "match_start",
-		Payload: map[string]interface{}{
-			"match_id":      match.ID,
-			"match_type":    pair.MatchType,
-			"timer_seconds": MatchTimerSeconds,
-			"questions":     playerQuestions,
-			"players":       playerInfos,
-		},
-	}
 	for _, p := range players {
-		s.hub.SendToUser(p.UserID, startMsg)
+		s.hub.SendToUser(p.UserID, ws.Message{
+			Type: "match_start",
+			Payload: map[string]interface{}{
+				"match_id":      match.ID,
+				"match_type":    pair.MatchType,
+				"timer_seconds": MatchTimerSeconds,
+				"questions":     toPlayerQuestions(questions, matchShuffleKey(match.ID, p.UserID)),
+				"players":       playerInfos,
+			},
+		})
 	}
 
 	// ── Step 7: Start countdown timer ────────────────────────────────
@@ -630,17 +628,12 @@ func liveMatchKey(matchID string) string {
 	return "live_match:" + matchID
 }
 
-func toPlayerQuestions(questions []models.Question) []models.QuestionForPlayer {
+// toPlayerQuestions strips answers and shuffles each question's options
+// for shuffleKey (see option_order.go).
+func toPlayerQuestions(questions []models.Question, shuffleKey string) []models.QuestionForPlayer {
 	result := make([]models.QuestionForPlayer, len(questions))
 	for i, q := range questions {
-		opts := make([]models.OptionForPlayer, len(q.Options))
-		for j, o := range q.Options {
-			opts[j] = models.OptionForPlayer{
-				ID:         o.ID,
-				OptionText: o.OptionText,
-				OrderIndex: o.OrderIndex,
-			}
-		}
+		opts := playerOptions(q, shuffleKey)
 		result[i] = models.QuestionForPlayer{
 			ID:                   q.ID,
 			QuestionType:         q.QuestionType,
@@ -819,9 +812,6 @@ func (s *MatchService) startFriendMatchGame(match *models.Match, dbPlayers []mod
 	}
 	s.cache.Set(liveMatchKey(match.ID), liveMatch, 35*time.Minute)
 
-	// Build player-safe questions.
-	playerQuestions := toPlayerQuestions(questions)
-
 	// Build player info list.
 	playerInfos := make([]map[string]interface{}, len(dbPlayers))
 	for i, p := range dbPlayers {
@@ -831,19 +821,18 @@ func (s *MatchService) startFriendMatchGame(match *models.Match, dbPlayers []mod
 		}
 	}
 
-	// Push match_start to every player.
-	startMsg := ws.Message{
-		Type: "match_start",
-		Payload: map[string]interface{}{
-			"match_id":      match.ID,
-			"match_type":    "friend",
-			"timer_seconds": MatchTimerSeconds,
-			"questions":     playerQuestions,
-			"players":       playerInfos,
-		},
-	}
+	// Push match_start to every player, each with their own option order.
 	for _, p := range dbPlayers {
-		s.hub.SendToUser(p.UserID, startMsg)
+		s.hub.SendToUser(p.UserID, ws.Message{
+			Type: "match_start",
+			Payload: map[string]interface{}{
+				"match_id":      match.ID,
+				"match_type":    "friend",
+				"timer_seconds": MatchTimerSeconds,
+				"questions":     toPlayerQuestions(questions, matchShuffleKey(match.ID, p.UserID)),
+				"players":       playerInfos,
+			},
+		})
 	}
 
 	// Collect matchmaking.Entry-style structs for the timer (just needs UserID).
@@ -872,7 +861,10 @@ type MatchDetails struct {
 // GetMatchDetails returns the match record, its players, and — if the match
 // is still live — the current scoreboard from the in-memory cache.
 // Completed matches return the persisted final scores from Postgres.
-func (s *MatchService) GetMatchDetails(ctx context.Context, matchID string) (*MatchDetails, error) {
+// GetMatchDetails returns a match. viewerID decides the option order of a
+// live match's questions, so a player reloading the page sees exactly the
+// order they were given at match_start.
+func (s *MatchService) GetMatchDetails(ctx context.Context, matchID, viewerID string) (*MatchDetails, error) {
 	match, err := s.matchRepo.GetMatch(ctx, matchID)
 	if err != nil {
 		return nil, fmt.Errorf("get match: %w", err)
@@ -897,7 +889,7 @@ func (s *MatchService) GetMatchDetails(ctx context.Context, matchID string) (*Ma
 		if raw, ok := s.cache.Get(liveMatchKey(matchID)); ok {
 			lm := raw.(*LiveMatch)
 			detail.LiveScores = lm.scoreBoard()
-			detail.Questions = toPlayerQuestions(lm.Questions)
+			detail.Questions = toPlayerQuestions(lm.Questions, matchShuffleKey(matchID, viewerID))
 		}
 	}
 

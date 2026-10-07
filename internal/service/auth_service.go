@@ -2,7 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/exam-arena/internal/models"
@@ -76,6 +80,48 @@ func (s *AuthService) Register(ctx context.Context, req RegisterRequest) (*AuthR
 		return nil, err
 	}
 
+	return &AuthResponse{Token: token, User: user}, nil
+}
+
+// Guest creates a fresh throwaway demo account and signs it in.
+//
+// Every visitor gets their own account: the WebSocket hub allows one live
+// session per user, so a single shared demo login would make visitors
+// disconnect each other. Guests are hidden from rating leaderboards and
+// removed after a few days if nobody else depends on them.
+func (s *AuthService) Guest(ctx context.Context) (*AuthResponse, error) {
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return nil, err
+	}
+	// Nobody knows this password; the account is reachable only via the token.
+	hash, err := utils.HashPassword(hex.EncodeToString(secret))
+	if err != nil {
+		return nil, errors.New("failed to create guest")
+	}
+
+	var user *models.User
+	for attempt := 0; attempt < 5 && user == nil; attempt++ {
+		n, err := rand.Int(rand.Reader, big.NewInt(900000))
+		if err != nil {
+			return nil, err
+		}
+		num := n.Int64() + 100000
+		username := fmt.Sprintf("guest_%d", num)
+		email := fmt.Sprintf("%s.%s@guest.invalid", username, hex.EncodeToString(secret[:4]))
+		user, err = s.userRepo.CreateGuest(ctx, username, email, hash, fmt.Sprintf("Guest %d", num))
+		if err != nil && !strings.Contains(err.Error(), "duplicate key") {
+			return nil, err
+		}
+	}
+	if user == nil {
+		return nil, errors.New("could not create a guest account, please try again")
+	}
+
+	token, err := utils.GenerateToken(user.ID, user.Username, user.Role, s.jwtSecret, s.jwtExpiry)
+	if err != nil {
+		return nil, err
+	}
 	return &AuthResponse{Token: token, User: user}, nil
 }
 

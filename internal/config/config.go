@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -19,6 +20,11 @@ type Config struct {
 	JWTExpiryHours int
 	RateLimitRPS   float64
 	RateLimitBurst int
+
+	// Question generator (internal/questiongen, service.QuestionPool).
+	QuestionGenEnabled     bool
+	QuestionGenPoolSize    int
+	QuestionGenRotateEvery time.Duration
 }
 
 func Load() (*Config, error) {
@@ -47,6 +53,10 @@ func Load() (*Config, error) {
 	cfg.RateLimitRPS = getEnvFloat("RATE_LIMIT_RPS", 100)
 	cfg.RateLimitBurst = getEnvInt("RATE_LIMIT_BURST", 200)
 
+	cfg.QuestionGenEnabled = getEnvBool("QUESTION_GEN_ENABLED", false)
+	cfg.QuestionGenPoolSize = getEnvInt("QUESTION_GEN_POOL_SIZE", 600)
+	cfg.QuestionGenRotateEvery = time.Duration(getEnvInt("QUESTION_GEN_ROTATE_HOURS", 6)) * time.Hour
+
 	return cfg, nil
 }
 
@@ -61,6 +71,15 @@ func getEnvInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if i, err := strconv.Atoi(v); err == nil {
 			return i
+		}
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
 		}
 	}
 	return fallback
