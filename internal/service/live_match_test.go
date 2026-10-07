@@ -32,9 +32,11 @@ func TestRecordAnswerScoringAndCompletion(t *testing.T) {
 		t.Fatalf("first answer: ok=%v outcome=%+v", ok, out)
 	}
 
-	out, _ = lm.recordAnswer("a", "q0", true, 150)
-	if !out.duplicate || out.score != 150 {
-		t.Fatalf("duplicate answer should be ignored, got %+v", out)
+	// A resend (even claiming a different result) changes nothing and
+	// reports the original grading so the sender can be re-acknowledged.
+	out, _ = lm.recordAnswer("a", "q0", false, 0)
+	if !out.duplicate || out.score != 150 || !out.prevCorrect || out.prevPoints != 150 {
+		t.Fatalf("duplicate answer should be ignored and report the original, got %+v", out)
 	}
 
 	if _, ok := lm.recordAnswer("intruder", "q0", true, 1); ok {

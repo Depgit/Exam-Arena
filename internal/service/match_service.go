@@ -54,6 +54,9 @@ type LivePlayer struct {
 	Username    string
 	Score       int
 	AnsweredIDs map[string]bool // questionID → answered (bool = correct)
+	// questionID → points awarded, so a resent answer can be re-acked with
+	// the original result. Guarded by LiveMatch.mu; created on first answer.
+	answerPoints map[string]int
 }
 
 // answerOutcome is what recordAnswer reports back to SubmitAnswer.
@@ -61,6 +64,10 @@ type answerOutcome struct {
 	score     int  // the player's score after this answer
 	finished  bool // every player has now answered every question
 	duplicate bool // this question was already answered; nothing changed
+	// For a duplicate: how the original answer was graded, so the sender
+	// can be re-acknowledged (clients resend until they get an ack).
+	prevCorrect bool
+	prevPoints  int
 }
 
 // recordAnswer applies one answer atomically under the write lock.
@@ -74,12 +81,16 @@ func (lm *LiveMatch) recordAnswer(userID, questionID string, isCorrect bool, poi
 		return answerOutcome{}, false
 	}
 	// Idempotent: ignore duplicate answers for the same question.
-	if _, already := player.AnsweredIDs[questionID]; already {
-		return answerOutcome{score: player.Score, duplicate: true}, true
+	if prev, already := player.AnsweredIDs[questionID]; already {
+		return answerOutcome{score: player.Score, duplicate: true, prevCorrect: prev, prevPoints: player.answerPoints[questionID]}, true
 	}
 
 	player.Score += points
 	player.AnsweredIDs[questionID] = isCorrect
+	if player.answerPoints == nil {
+		player.answerPoints = make(map[string]int)
+	}
+	player.answerPoints[questionID] = points
 
 	return answerOutcome{score: player.Score, finished: lm.allAnsweredLocked()}, true
 }
@@ -362,6 +373,10 @@ func (s *MatchService) SubmitAnswer(ctx context.Context, req AnswerRequest) erro
 		return fmt.Errorf("user %s is not a player in match %s", req.UserID, req.MatchID)
 	}
 	if outcome.duplicate {
+		// The client resends answers it has no ack for (e.g. after a
+		// reconnect). Nothing changes, but ack it again — only to the sender —
+		// or an answer whose first ack was lost could never be confirmed.
+		s.ackAnswer(lm, req.UserID, req.QuestionID, outcome.prevCorrect, outcome.prevPoints)
 		return nil
 	}
 
@@ -592,6 +607,23 @@ func (s *MatchService) endMatch(ctx context.Context, lm *LiveMatch) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
+
+// ackAnswer re-sends a score_update for an already-recorded answer to its
+// sender only. Same shape as the broadcast, so the client needs no new path.
+func (s *MatchService) ackAnswer(lm *LiveMatch, userID, questionID string, isCorrect bool, points int) {
+	s.hub.SendToUser(userID, ws.Message{
+		Type: "score_update",
+		Payload: map[string]interface{}{
+			"match_id":      lm.MatchID,
+			"user_id":       userID,
+			"question_id":   questionID,
+			"is_correct":    isCorrect,
+			"points_earned": points,
+			"scoreboard":    lm.scoreBoard(),
+			"duplicate":     true,
+		},
+	})
+}
 
 func (s *MatchService) broadcastScoreUpdate(lm *LiveMatch, answererID, questionID string, isCorrect bool, pointsEarned int) {
 	msg := ws.Message{
