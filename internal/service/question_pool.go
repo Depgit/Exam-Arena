@@ -35,6 +35,10 @@ type QuestionPoolConfig struct {
 	PoolSize       int           // per category, across all difficulties
 	RotateEvery    time.Duration // how often to refresh part of the pool
 	RotateFraction float64       // share of each pool replaced per rotation
+	// PerUser caps all published questions per category at
+	// players × PerUser ÷ categories. Beyond that the oldest are archived,
+	// hand-written or generated alike. 0 disables the cap.
+	PerUser int
 }
 
 func NewQuestionPool(repo *repository.QuestionRepo, bank *appCache.QuestionBank, cfg QuestionPoolConfig) *QuestionPool {
@@ -51,6 +55,54 @@ func NewQuestionPool(repo *repository.QuestionRepo, bank *appCache.QuestionBank,
 }
 
 func (p *QuestionPool) perLevel() int { return p.cfg.PoolSize / len(questiongen.Difficulties) }
+
+// budget is the current size plan: how many generated questions to keep
+// per difficulty, and how many published questions each category may hold
+// in total (0 = no cap).
+func (p *QuestionPool) budget(ctx context.Context, activeCategories int) (levelTarget, categoryCap int, err error) {
+	if p.cfg.PerUser <= 0 || activeCategories == 0 {
+		return p.perLevel(), 0, nil
+	}
+	players, err := p.repo.CountPlayers(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	levelTarget, categoryCap = capBudget(p.perLevel(), players, p.cfg.PerUser, activeCategories, len(questiongen.Difficulties))
+	slog.Info("question budget", "players", players, "per_user", p.cfg.PerUser,
+		"total_cap", players*p.cfg.PerUser, "per_category", categoryCap, "generated_per_level", levelTarget)
+	return levelTarget, categoryCap, nil
+}
+
+// capBudget splits players × perUser evenly across categories, and keeps
+// the generated pool within each category's share so the generator never
+// inserts questions the cap would immediately archive.
+func capBudget(perLevel, players, perUser, categories, levels int) (levelTarget, categoryCap int) {
+	if perUser <= 0 || categories <= 0 || levels <= 0 {
+		return perLevel, 0
+	}
+	categoryCap = players * perUser / categories
+	levelTarget = perLevel
+	if capped := categoryCap / levels; capped < levelTarget {
+		levelTarget = capped
+	}
+	return levelTarget, categoryCap
+}
+
+// activeGeneratedCategories maps each generator category code to its id,
+// skipping missing or deactivated ones.
+func (p *QuestionPool) activeGeneratedCategories(ctx context.Context) (map[string]string, error) {
+	out := map[string]string{}
+	for _, code := range questiongen.Categories() {
+		id, err := p.repo.ActiveCategoryIDByCode(ctx, code)
+		if err != nil {
+			return nil, err
+		}
+		if id != "" {
+			out[code] = id
+		}
+	}
+	return out, nil
+}
 
 // Start fills the pool in the background, then rotates it on a timer.
 // Startup is not delayed: matches use the existing bank until the first
@@ -96,20 +148,37 @@ func (p *QuestionPool) Fill(ctx context.Context) error {
 
 func (p *QuestionPool) fillLocked(ctx context.Context) (map[string]int, error) {
 	inserted := map[string]int{}
+	cats, err := p.activeGeneratedCategories(ctx)
+	if err != nil {
+		return inserted, err
+	}
+	target, categoryCap, err := p.budget(ctx, len(cats))
+	if err != nil {
+		return inserted, err
+	}
 	for _, code := range questiongen.Categories() {
-		catID, err := p.repo.ActiveCategoryIDByCode(ctx, code)
-		if err != nil {
-			return inserted, err
-		}
-		if catID == "" {
+		catID, ok := cats[code]
+		if !ok {
 			continue // category missing or deactivated
 		}
-		n, err := p.fillCategory(ctx, code, catID)
+		n, trimmed, err := p.fillCategory(ctx, code, catID, target)
 		inserted[code] = n
 		if err != nil {
 			return inserted, fmt.Errorf("%s: %w", code, err)
 		}
-		if n > 0 {
+		// Enforce the cap after topping up: keep the newest questions,
+		// archive the oldest of any kind.
+		if categoryCap > 0 {
+			archived, err := p.repo.ArchiveOldestBeyond(ctx, catID, categoryCap)
+			if err != nil {
+				return inserted, fmt.Errorf("%s: %w", code, err)
+			}
+			if archived > 0 {
+				slog.Info("question cap: archived oldest questions", "category", code, "archived", archived, "cap", categoryCap)
+				trimmed += int(archived)
+			}
+		}
+		if n > 0 || trimmed > 0 {
 			if err := p.bank.RefreshCategory(ctx, catID); err != nil {
 				slog.Warn("question bank refresh failed", "category", code, "error", err)
 			}
@@ -119,21 +188,35 @@ func (p *QuestionPool) fillLocked(ctx context.Context) (map[string]int, error) {
 	return inserted, nil
 }
 
-func (p *QuestionPool) fillCategory(ctx context.Context, code, catID string) (int, error) {
+// fillCategory brings each difficulty's generated pool to target: tops it
+// up, or retires the oldest extras if the cap has shrunk below what's there.
+func (p *QuestionPool) fillCategory(ctx context.Context, code, catID string, target int) (inserted, trimmed int, err error) {
 	counts, bodies, err := p.repo.GeneratedPoolState(ctx, catID)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
+	}
+	for _, d := range questiongen.Difficulties {
+		if extra := counts[string(d)] - target; extra > 0 {
+			n, err := p.repo.RetireOldestGenerated(ctx, catID, string(d), extra)
+			if err != nil {
+				return 0, trimmed, err
+			}
+			trimmed += int(n)
+			counts[string(d)] -= int(n)
+		}
+	}
+	if trimmed > 0 {
+		slog.Info("question pool trimmed to budget", "category", code, "retired", trimmed)
 	}
 	topicIDs := map[string]string{}
 	for _, name := range questiongen.Topics(code) {
 		id, err := p.repo.EnsureTopic(ctx, catID, name)
 		if err != nil {
-			return 0, err
+			return 0, trimmed, err
 		}
 		topicIDs[name] = id
 	}
 
-	target := p.perLevel()
 	total := 0
 	for _, d := range questiongen.Difficulties {
 		need := target - counts[string(d)]
@@ -169,10 +252,10 @@ func (p *QuestionPool) fillCategory(ctx context.Context, code, catID string) (in
 		n, err := p.repo.InsertGenerated(ctx, catID, string(d), target, batch)
 		total += n
 		if err != nil {
-			return total, err
+			return total, trimmed, err
 		}
 	}
-	return total, nil
+	return total, trimmed, nil
 }
 
 // Rotate archives the oldest RotateFraction of each generated pool, tops
@@ -189,13 +272,18 @@ func (p *QuestionPool) RotateNow(ctx context.Context) (*FillResult, error) {
 	defer p.mu.Unlock()
 
 	res := &FillResult{Retired: map[string]int{}}
-	retire := int(math.Round(float64(p.perLevel()) * p.cfg.RotateFraction))
+	cats, err := p.activeGeneratedCategories(ctx)
+	if err != nil {
+		return res, err
+	}
+	target, _, err := p.budget(ctx, len(cats))
+	if err != nil {
+		return res, err
+	}
+	retire := int(math.Round(float64(target) * p.cfg.RotateFraction))
 	for _, code := range questiongen.Categories() {
-		catID, err := p.repo.ActiveCategoryIDByCode(ctx, code)
-		if err != nil {
-			return res, err
-		}
-		if catID == "" {
+		catID, ok := cats[code]
+		if !ok {
 			continue
 		}
 		for _, d := range questiongen.Difficulties {

@@ -194,6 +194,39 @@ func (r *QuestionRepo) InsertGenerated(ctx context.Context, categoryID, difficul
 	return n, nil
 }
 
+// CountPlayers counts real players for the question cap: not guests, not
+// admins, not deleted.
+func (r *QuestionRepo) CountPlayers(ctx context.Context) (int, error) {
+	var n int
+	err := r.db.QueryRow(ctx,
+		`SELECT count(*) FROM users WHERE NOT is_guest AND role <> 'admin' AND deleted_at IS NULL`).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count players: %w", err)
+	}
+	return n, nil
+}
+
+// ArchiveOldestBeyond keeps only the newest keep published questions in a
+// category — hand-written or generated alike — and archives the rest.
+// Archived questions leave matches, practice and new daily challenges but
+// stay stored, so past matches and answers that used them remain intact
+// (and an admin can republish one).
+func (r *QuestionRepo) ArchiveOldestBeyond(ctx context.Context, categoryID string, keep int) (int64, error) {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE questions SET status = 'archived', updated_at = now()
+		WHERE id IN (
+			SELECT id FROM questions
+			WHERE exam_category_id = $1 AND status = 'published'
+			ORDER BY created_at DESC, id
+			OFFSET $2
+		)
+	`, categoryID, keep)
+	if err != nil {
+		return 0, fmt.Errorf("archive beyond cap: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 // RetireOldestGenerated archives the n oldest published generated questions
 // at one difficulty. Archived rows stay in place so past matches, answers,
 // practice sessions and daily challenges that used them remain intact.

@@ -82,6 +82,7 @@ func main() {
 		Enabled:     cfg.QuestionGenEnabled,
 		PoolSize:    cfg.QuestionGenPoolSize,
 		RotateEvery: cfg.QuestionGenRotateEvery,
+		PerUser:     cfg.QuestionGenPerUser,
 	})
 	questionPool.Start(bgCtx)
 

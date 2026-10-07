@@ -25,6 +25,7 @@ type Config struct {
 	QuestionGenEnabled     bool
 	QuestionGenPoolSize    int
 	QuestionGenRotateEvery time.Duration
+	QuestionGenPerUser     int
 }
 
 func Load() (*Config, error) {
@@ -56,6 +57,7 @@ func Load() (*Config, error) {
 	cfg.QuestionGenEnabled = getEnvBool("QUESTION_GEN_ENABLED", false)
 	cfg.QuestionGenPoolSize = getEnvInt("QUESTION_GEN_POOL_SIZE", 600)
 	cfg.QuestionGenRotateEvery = time.Duration(getEnvInt("QUESTION_GEN_ROTATE_HOURS", 6)) * time.Hour
+	cfg.QuestionGenPerUser = getEnvInt("QUESTION_GEN_PER_USER", 100)
 
 	return cfg, nil
 }
