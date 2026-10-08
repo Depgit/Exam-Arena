@@ -1,0 +1,463 @@
+package daily
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/exam-arena/internal/models"
+	"github.com/exam-arena/internal/questions"
+)
+
+const (
+	DailyQuestionCount    = 10
+	DailyTimeLimitSeconds = 180
+	// dailyGrace absorbs network latency on a submit sent at the deadline.
+	dailyGrace = 10 * time.Second
+	// dailyLeaderboardSize is how many entries the overview returns.
+	dailyLeaderboardSize = 10
+)
+
+// dailyZone decides when the day rolls over: midnight IST. A fixed offset
+// avoids depending on tzdata being present in the container.
+var dailyZone = time.FixedZone("IST", 5*60*60+30*60)
+
+var (
+	ErrNoDailyChallenge   = errors.New("no daily challenge available today")
+	ErrDailyAlreadyPlayed = errors.New("you have already played today's challenge")
+	ErrDailyNotStarted    = errors.New("start today's challenge first")
+)
+
+type Service struct {
+	dailyRepo    *Store
+	questionRepo *questions.Store
+	now          func() time.Time
+
+	// A day's challenge (and its questions) never changes once created, so
+	// keep the current one in memory instead of re-reading it on every
+	// lobby load. Each saved query is a full round trip to the database.
+	cacheMu        sync.Mutex
+	cacheDay       string
+	cacheChallenge *models.DailyChallenge
+	cacheQuestions []models.Question
+}
+
+func NewService(dailyRepo *Store, questionRepo *questions.Store) *Service {
+	return &Service{dailyRepo: dailyRepo, questionRepo: questionRepo, now: time.Now}
+}
+
+// challengeDate is today's date in dailyZone, as midnight UTC (the form
+// stored in the DATE column).
+func challengeDate(now time.Time) time.Time {
+	y, m, d := now.In(dailyZone).Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+// nextReset is the next midnight in dailyZone.
+func nextReset(now time.Time) time.Time {
+	y, m, d := now.In(dailyZone).Date()
+	return time.Date(y, m, d+1, 0, 0, 0, 0, dailyZone)
+}
+
+// ensureChallenge returns today's challenge, fixing its question set on
+// first use.
+// challenge returns the day's challenge, creating it if needed, from memory
+// when possible.
+func (s *Service) challenge(ctx context.Context, date time.Time) (*models.DailyChallenge, error) {
+	day := date.Format("2006-01-02")
+	s.cacheMu.Lock()
+	if s.cacheDay == day && s.cacheChallenge != nil {
+		c := s.cacheChallenge
+		s.cacheMu.Unlock()
+		return c, nil
+	}
+	s.cacheMu.Unlock()
+
+	c, err := s.ensureChallenge(ctx, date)
+	if err != nil {
+		return nil, err
+	}
+	s.cacheMu.Lock()
+	if s.cacheDay != day {
+		s.cacheQuestions = nil
+	}
+	s.cacheDay, s.cacheChallenge = day, c
+	s.cacheMu.Unlock()
+	return c, nil
+}
+
+// challengeQuestions returns the challenge's questions (with answers),
+// from memory when possible.
+func (s *Service) challengeQuestions(ctx context.Context, c *models.DailyChallenge) ([]models.Question, error) {
+	day := c.Date.Format("2006-01-02")
+	s.cacheMu.Lock()
+	if s.cacheDay == day && s.cacheQuestions != nil {
+		qs := s.cacheQuestions
+		s.cacheMu.Unlock()
+		return qs, nil
+	}
+	s.cacheMu.Unlock()
+
+	qs, err := s.questionRepo.GetByIDsWithOptions(ctx, c.QuestionIDs)
+	if err != nil {
+		return nil, err
+	}
+	s.cacheMu.Lock()
+	if s.cacheDay == day {
+		s.cacheQuestions = qs
+	}
+	s.cacheMu.Unlock()
+	return qs, nil
+}
+
+func (s *Service) ensureChallenge(ctx context.Context, date time.Time) (*models.DailyChallenge, error) {
+	c, err := s.dailyRepo.GetChallenge(ctx, date)
+	if err != nil || c != nil {
+		return c, err
+	}
+	ids, err := s.questionRepo.PickDailyQuestionIDs(ctx, date.Format("2006-01-02"), DailyQuestionCount)
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, ErrNoDailyChallenge
+	}
+	if err := s.dailyRepo.CreateChallenge(ctx, date, ids, DailyTimeLimitSeconds); err != nil {
+		return nil, err
+	}
+	return s.dailyRepo.GetChallenge(ctx, date)
+}
+
+func deadlineOf(a *models.DailyAttempt, c *models.DailyChallenge) time.Time {
+	return a.StartedAt.Add(time.Duration(c.TimeLimitSeconds) * time.Second)
+}
+
+// expireIfOverdue closes an attempt whose time ran out without a submit,
+// scoring it zero. It reports whether the attempt is now completed.
+func (s *Service) expireIfOverdue(ctx context.Context, a *models.DailyAttempt, c *models.DailyChallenge) (bool, error) {
+	if a.CompletedAt != nil {
+		return true, nil
+	}
+	if s.now().Before(deadlineOf(a, c).Add(dailyGrace)) {
+		return false, nil
+	}
+	limitMs := c.TimeLimitSeconds * 1000
+	if _, err := s.dailyRepo.CompleteAttempt(ctx, a.ID, 0, len(c.QuestionIDs), limitMs, []models.DailyAnswerRecord{}); err != nil {
+		return false, err
+	}
+	now := s.now()
+	a.CompletedAt, a.Correct, a.Total, a.TimeTakenMs = &now, 0, len(c.QuestionIDs), &limitMs
+	return true, nil
+}
+
+// ── Overview ─────────────────────────────────────────────────────────
+
+type DailyAttemptView struct {
+	Status      string            `json:"status"` // in_progress | completed
+	StartedAt   time.Time         `json:"started_at"`
+	Deadline    time.Time         `json:"deadline"`
+	Correct     int               `json:"correct"`
+	Total       int               `json:"total"`
+	TimeTakenMs *int              `json:"time_taken_ms"`
+	Rank        int               `json:"rank,omitempty"`
+	Review      []DailyReviewItem `json:"review,omitempty"`
+}
+
+type DailyOverview struct {
+	Date             string              `json:"date"`
+	Available        bool                `json:"available"`
+	QuestionCount    int                 `json:"question_count"`
+	TimeLimitSeconds int                 `json:"time_limit_seconds"`
+	ResetsAt         time.Time           `json:"resets_at"`
+	Participants     int                 `json:"participants"`
+	Attempt          *DailyAttemptView   `json:"attempt"`
+	Leaderboard      []models.DailyEntry `json:"leaderboard"`
+}
+
+// Overview describes today's challenge for the home page: the user's own
+// attempt (with a review once completed) and the top of the leaderboard.
+func (s *Service) Overview(ctx context.Context, userID string) (*DailyOverview, error) {
+	now := s.now()
+	date := challengeDate(now)
+	ov := &DailyOverview{
+		Date:             date.Format("2006-01-02"),
+		TimeLimitSeconds: DailyTimeLimitSeconds,
+		ResetsAt:         nextReset(now),
+		Leaderboard:      []models.DailyEntry{},
+	}
+
+	c, err := s.challenge(ctx, date)
+	if errors.Is(err, ErrNoDailyChallenge) {
+		return ov, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	ov.Available = true
+	ov.QuestionCount = len(c.QuestionIDs)
+	ov.TimeLimitSeconds = c.TimeLimitSeconds
+
+	// These three reads are independent: run them at the same time, so the
+	// lobby waits for one database round trip instead of three.
+	var (
+		wg                       sync.WaitGroup
+		a                        *models.DailyAttempt
+		errA, errCount, errBoard error
+	)
+	wg.Add(3)
+	go func() { defer wg.Done(); a, errA = s.dailyRepo.GetAttempt(ctx, date, userID) }()
+	go func() { defer wg.Done(); ov.Participants, errCount = s.dailyRepo.CountParticipants(ctx, date) }()
+	go func() {
+		defer wg.Done()
+		ov.Leaderboard, errBoard = s.dailyRepo.Leaderboard(ctx, date, dailyLeaderboardSize)
+	}()
+	wg.Wait()
+	for _, e := range []error{errA, errCount, errBoard} {
+		if e != nil {
+			return nil, e
+		}
+	}
+	if ov.Leaderboard == nil {
+		ov.Leaderboard = []models.DailyEntry{}
+	}
+	if a != nil {
+		completed, err := s.expireIfOverdue(ctx, a, c)
+		if err != nil {
+			return nil, err
+		}
+		view := &DailyAttemptView{
+			Status:      "in_progress",
+			StartedAt:   a.StartedAt,
+			Deadline:    deadlineOf(a, c),
+			Correct:     a.Correct,
+			Total:       a.Total,
+			TimeTakenMs: a.TimeTakenMs,
+		}
+		if completed {
+			view.Status = "completed"
+			if a.TimeTakenMs != nil {
+				view.Rank, _, _ = s.dailyRepo.Standing(ctx, date, a.Correct, *a.TimeTakenMs)
+			}
+			view.Review, err = s.review(ctx, c, a.Answers)
+			if err != nil {
+				return nil, err
+			}
+		}
+		ov.Attempt = view
+	}
+	return ov, nil
+}
+
+// ── Start ────────────────────────────────────────────────────────────
+
+type DailyStart struct {
+	Date             string                     `json:"date"`
+	StartedAt        time.Time                  `json:"started_at"`
+	Deadline         time.Time                  `json:"deadline"`
+	ServerTime       time.Time                  `json:"server_time"` // lets clients correct for clock skew
+	TimeLimitSeconds int                        `json:"time_limit_seconds"`
+	Questions        []models.QuestionForPlayer `json:"questions"`
+}
+
+// Start begins (or resumes) the user's attempt and returns the questions
+// without their answers. The clock starts at the first call.
+func (s *Service) Start(ctx context.Context, userID string) (*DailyStart, error) {
+	date := challengeDate(s.now())
+	c, err := s.challenge(ctx, date)
+	if err != nil {
+		return nil, err
+	}
+
+	a, err := s.dailyRepo.StartAttempt(ctx, date, userID, len(c.QuestionIDs))
+	if err != nil {
+		return nil, err
+	}
+	completed, err := s.expireIfOverdue(ctx, a, c)
+	if err != nil {
+		return nil, err
+	}
+	if completed {
+		return nil, ErrDailyAlreadyPlayed
+	}
+
+	picked, err := s.challengeQuestions(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	return &DailyStart{
+		Date:             date.Format("2006-01-02"),
+		StartedAt:        a.StartedAt,
+		Deadline:         deadlineOf(a, c),
+		ServerTime:       s.now(),
+		TimeLimitSeconds: c.TimeLimitSeconds,
+		// Keyed by attempt: resuming keeps the order, each player gets their own.
+		Questions: questions.ForPlayers(picked, "daily:"+a.ID),
+	}, nil
+}
+
+// ── Submit ───────────────────────────────────────────────────────────
+
+type DailyAnswer struct {
+	QuestionID string `json:"question_id"`
+	OptionID   string `json:"option_id"` // empty = skipped
+}
+
+type DailyReviewItem struct {
+	QuestionID         string  `json:"question_id"`
+	Body               string  `json:"body"`
+	SelectedOptionID   *string `json:"selected_option_id"`
+	SelectedOptionText *string `json:"selected_option_text"`
+	CorrectOptionID    string  `json:"correct_option_id"`
+	CorrectOptionText  string  `json:"correct_option_text"`
+	IsCorrect          bool    `json:"is_correct"`
+	Explanation        *string `json:"explanation"`
+}
+
+type DailyResult struct {
+	Correct      int               `json:"correct"`
+	Total        int               `json:"total"`
+	TimeTakenMs  int               `json:"time_taken_ms"`
+	Expired      bool              `json:"expired"`
+	Rank         int               `json:"rank"`
+	Participants int               `json:"participants"`
+	Review       []DailyReviewItem `json:"review"`
+}
+
+// Submit grades the user's answers. A submit after the time limit (plus a
+// short grace period) scores zero.
+func (s *Service) Submit(ctx context.Context, userID string, answers []DailyAnswer) (*DailyResult, error) {
+	now := s.now()
+	date := challengeDate(now)
+	c, err := s.dailyRepo.GetChallenge(ctx, date)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil {
+		return nil, ErrDailyNotStarted
+	}
+	a, err := s.dailyRepo.GetAttempt(ctx, date, userID)
+	if err != nil {
+		return nil, err
+	}
+	if a == nil {
+		return nil, ErrDailyNotStarted
+	}
+	if a.CompletedAt != nil {
+		return nil, ErrDailyAlreadyPlayed
+	}
+
+	limit := time.Duration(c.TimeLimitSeconds) * time.Second
+	elapsed := now.Sub(a.StartedAt)
+	expired := elapsed > limit+dailyGrace
+	if elapsed > limit {
+		elapsed = limit
+	}
+
+	questions, err := s.challengeQuestions(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	chosen := make(map[string]string, len(answers))
+	for _, ans := range answers {
+		if ans.OptionID != "" {
+			chosen[ans.QuestionID] = ans.OptionID
+		}
+	}
+
+	records := make([]models.DailyAnswerRecord, 0, len(questions))
+	correct := 0
+	for _, q := range questions {
+		rec := models.DailyAnswerRecord{QuestionID: q.ID}
+		if opt, ok := chosen[q.ID]; ok && !expired {
+			o := opt
+			rec.OptionID = &o
+			rec.IsCorrect = correctOptionID(q) == opt
+		}
+		if rec.IsCorrect {
+			correct++
+		}
+		records = append(records, rec)
+	}
+
+	timeMs := int(elapsed.Milliseconds())
+	ok, err := s.dailyRepo.CompleteAttempt(ctx, a.ID, correct, len(questions), timeMs, records)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, ErrDailyAlreadyPlayed
+	}
+
+	rank, participants, err := s.dailyRepo.Standing(ctx, date, correct, timeMs)
+	if err != nil {
+		return nil, err
+	}
+	review, err := s.reviewFrom(questions, records)
+	if err != nil {
+		return nil, err
+	}
+	return &DailyResult{
+		Correct:      correct,
+		Total:        len(questions),
+		TimeTakenMs:  timeMs,
+		Expired:      expired,
+		Rank:         rank,
+		Participants: participants,
+		Review:       review,
+	}, nil
+}
+
+func correctOptionID(q models.Question) string {
+	for _, o := range q.Options {
+		if o.IsCorrect {
+			return o.ID
+		}
+	}
+	return ""
+}
+
+func optionText(q models.Question, optionID string) string {
+	for _, o := range q.Options {
+		if o.ID == optionID {
+			return o.OptionText
+		}
+	}
+	return ""
+}
+
+func (s *Service) review(ctx context.Context, c *models.DailyChallenge, records []models.DailyAnswerRecord) ([]DailyReviewItem, error) {
+	questions, err := s.challengeQuestions(ctx, c)
+	if err != nil {
+		return nil, fmt.Errorf("load daily review: %w", err)
+	}
+	return s.reviewFrom(questions, records)
+}
+
+func (s *Service) reviewFrom(questions []models.Question, records []models.DailyAnswerRecord) ([]DailyReviewItem, error) {
+	byQuestion := make(map[string]models.DailyAnswerRecord, len(records))
+	for _, r := range records {
+		byQuestion[r.QuestionID] = r
+	}
+	items := make([]DailyReviewItem, 0, len(questions))
+	for _, q := range questions {
+		rec := byQuestion[q.ID]
+		correctID := correctOptionID(q)
+		item := DailyReviewItem{
+			QuestionID:        q.ID,
+			Body:              q.Body,
+			SelectedOptionID:  rec.OptionID,
+			CorrectOptionID:   correctID,
+			CorrectOptionText: optionText(q, correctID),
+			IsCorrect:         rec.IsCorrect,
+			Explanation:       q.Explanation,
+		}
+		if rec.OptionID != nil {
+			text := optionText(q, *rec.OptionID)
+			item.SelectedOptionText = &text
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
