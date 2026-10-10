@@ -18,6 +18,7 @@ open its `README.md` for what you give it and what you get back.
 | `practice/` | Solo practice sessions |
 | `daily/` | The daily challenge (same 10 questions for everyone) |
 | `leaderboard/` | Rankings per category |
+| `chat/` | The global chat: recent messages, posting, live delivery |
 | `admin/` | Admin console: stats, create/publish questions, category order |
 | `models/` | Shared data shapes (User, Question, Match…) — no logic |
 | `platform/` | Shared plumbing every feature uses (see `platform/README.md`) |

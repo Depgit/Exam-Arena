@@ -6,6 +6,7 @@ import (
 
 	"github.com/exam-arena/internal/admin"
 	"github.com/exam-arena/internal/auth"
+	"github.com/exam-arena/internal/chat"
 	"github.com/exam-arena/internal/daily"
 	"github.com/exam-arena/internal/friends"
 	"github.com/exam-arena/internal/leaderboard"
@@ -39,6 +40,7 @@ type deps struct {
 	daily          *daily.Handler
 	leaderboard    *leaderboard.Handler
 	generator      *questionpool.Handler
+	chat           *chat.Handler
 	adminStores    adminStores
 }
 
@@ -56,6 +58,10 @@ func routes(cfg *config.Config, d deps) http.Handler {
 	adminOnly := func(h http.HandlerFunc) http.HandlerFunc {
 		return middleware.Auth(cfg.JWTSecret, middleware.RequireRole("admin", h))
 	}
+	// Playing (matches, bots, friend challenges, practice, daily) needs a real
+	// account; demo (guest) accounts can only look around.
+	registered := auth.RegisteredOnly(d.adminStores.users)
+	canPlay := func(h http.HandlerFunc) http.HandlerFunc { return loggedIn(registered(h)) }
 	adminHandler := admin.NewHandler(d.adminStores.questions, d.adminStores.users, d.adminStores.matches, d.adminStores.flags, d.hub)
 
 	mux := http.NewServeMux()
@@ -79,15 +85,16 @@ func routes(cfg *config.Config, d deps) http.Handler {
 	mux.HandleFunc("GET /api/v1/users/{id}/matches", d.users.GetMatchHistory)
 
 	// Matchmaking queue — internal/matchmaking
-	mux.HandleFunc("POST /api/v1/matches/queue", loggedIn(d.queueEndpoints.JoinQueue))
+	mux.HandleFunc("POST /api/v1/matches/queue", canPlay(d.queueEndpoints.JoinQueue))
 	mux.HandleFunc("DELETE /api/v1/matches/queue", loggedIn(d.queueEndpoints.LeaveQueue))
 	mux.HandleFunc("GET /api/v1/matches/queue/stats", loggedIn(d.queueEndpoints.QueueStats))
 
 	// Matches: details, private rooms, bots — internal/match
+	mux.HandleFunc("GET /api/v1/matches/current", loggedIn(d.match.CurrentMatch))
 	mux.HandleFunc("GET /api/v1/matches/{id}", loggedIn(d.match.GetMatch))
-	mux.HandleFunc("POST /api/v1/matches/friend", loggedIn(d.match.CreateFriendMatch))
-	mux.HandleFunc("POST /api/v1/matches/friend/join", loggedIn(d.match.JoinFriendMatch))
-	mux.HandleFunc("POST /api/v1/matches/bot", loggedIn(d.match.PlayBot))
+	mux.HandleFunc("POST /api/v1/matches/friend", canPlay(d.match.CreateFriendMatch))
+	mux.HandleFunc("POST /api/v1/matches/friend/join", canPlay(d.match.JoinFriendMatch))
+	mux.HandleFunc("POST /api/v1/matches/bot", canPlay(d.match.PlayBot))
 
 	// Friends & challenges — internal/friends
 	mux.HandleFunc("GET /api/v1/friends", loggedIn(d.friends.ListFriends))
@@ -95,7 +102,7 @@ func routes(cfg *config.Config, d deps) http.Handler {
 	mux.HandleFunc("POST /api/v1/friends/requests/{id}/accept", loggedIn(d.friends.AcceptRequest))
 	mux.HandleFunc("POST /api/v1/friends/requests/{id}/decline", loggedIn(d.friends.DeclineRequest))
 	mux.HandleFunc("DELETE /api/v1/friends/{userId}", loggedIn(d.friends.RemoveFriend))
-	mux.HandleFunc("POST /api/v1/friends/{userId}/challenge", loggedIn(d.friends.ChallengeFriend))
+	mux.HandleFunc("POST /api/v1/friends/{userId}/challenge", canPlay(d.friends.ChallengeFriend))
 	mux.HandleFunc("DELETE /api/v1/friends/challenges/{matchId}", loggedIn(d.friends.CloseChallenge))
 
 	// Categories, topics, reporting a question — internal/questions
@@ -107,14 +114,18 @@ func routes(cfg *config.Config, d deps) http.Handler {
 
 	// Daily challenge — internal/daily
 	mux.HandleFunc("GET /api/v1/daily-challenge", loggedIn(d.daily.Overview))
-	mux.HandleFunc("POST /api/v1/daily-challenge/start", loggedIn(d.daily.Start))
-	mux.HandleFunc("POST /api/v1/daily-challenge/submit", loggedIn(d.daily.Submit))
+	mux.HandleFunc("POST /api/v1/daily-challenge/start", canPlay(d.daily.Start))
+	mux.HandleFunc("POST /api/v1/daily-challenge/submit", canPlay(d.daily.Submit))
 
 	// Solo practice — internal/practice
-	mux.HandleFunc("POST /api/v1/practice/start", loggedIn(d.practice.StartSession))
-	mux.HandleFunc("POST /api/v1/practice/{id}/answer", loggedIn(d.practice.SubmitAnswer))
+	mux.HandleFunc("POST /api/v1/practice/start", canPlay(d.practice.StartSession))
+	mux.HandleFunc("POST /api/v1/practice/{id}/answer", canPlay(d.practice.SubmitAnswer))
 	mux.HandleFunc("POST /api/v1/practice/{id}/end", loggedIn(d.practice.EndSession))
 	mux.HandleFunc("GET /api/v1/practice/{id}", loggedIn(d.practice.GetSession))
+
+	// Global chat — internal/chat (everyone logged in reads; real accounts post)
+	mux.HandleFunc("GET /api/v1/chat", loggedIn(d.chat.Recent))
+	mux.HandleFunc("POST /api/v1/chat", canPlay(d.chat.Send))
 
 	// Rankings — internal/leaderboard
 	mux.HandleFunc("GET /api/v1/leaderboard/{category}", d.leaderboard.GetLeaderboard)

@@ -21,7 +21,7 @@ import (
 
 const (
 	QuestionsPerMatch = 10
-	MatchTimerSeconds = 120
+	MatchTimerSeconds = 90
 	PointsPerCorrect  = 100
 	TimeBonusFull     = 50 // bonus if answered in < 10s
 	TimeBonusHalf     = 25 // bonus if answered in < 30s
@@ -174,6 +174,37 @@ func (lm *LiveMatch) scoreBoard() []map[string]interface{} {
 		}
 	}
 	return board
+}
+
+// AnswerView is one of a player's graded answers, sent back when they
+// reopen a live match so the page shows what they already answered.
+type AnswerView struct {
+	Correct bool `json:"correct"`
+	Points  int  `json:"points"`
+}
+
+// answersOf returns userID's graded answers by question id.
+func (lm *LiveMatch) answersOf(userID string) map[string]AnswerView {
+	lm.mu.RLock()
+	defer lm.mu.RUnlock()
+	player, ok := lm.PlayerStates[userID]
+	if !ok {
+		return nil
+	}
+	out := make(map[string]AnswerView, len(player.AnsweredIDs))
+	for qID, correct := range player.AnsweredIDs {
+		out[qID] = AnswerView{Correct: correct, Points: player.answerPoints[qID]}
+	}
+	return out
+}
+
+// remainingSeconds is how long the match clock has left, never below 0.
+func (lm *LiveMatch) remainingSeconds() int {
+	left := lm.TimerSeconds - int(time.Since(lm.StartedAt).Seconds())
+	if left < 0 {
+		return 0
+	}
+	return left
 }
 
 // ── Service ───────────────────────────────────────────────────────────
@@ -878,6 +909,10 @@ type Details struct {
 	Players    []models.MatchPlayer       `json:"players"`
 	Questions  []models.QuestionForPlayer `json:"questions,omitempty"`   // only while in_progress
 	LiveScores []map[string]interface{}   `json:"live_scores,omitempty"` // only while in_progress
+	// For a player reopening a live match: what they already answered and
+	// how long is left.
+	MyAnswers        map[string]AnswerView `json:"my_answers,omitempty"`
+	RemainingSeconds *int                  `json:"remaining_seconds,omitempty"`
 }
 
 // GetMatchDetails returns the match record, its players, and — if the match
@@ -912,10 +947,29 @@ func (s *Service) GetMatchDetails(ctx context.Context, matchID, viewerID string)
 			lm := raw.(*LiveMatch)
 			detail.LiveScores = lm.scoreBoard()
 			detail.Questions = questions.ForPlayers(lm.Questions, matchShuffleKey(matchID, viewerID))
+			detail.MyAnswers = lm.answersOf(viewerID)
+			left := lm.remainingSeconds()
+			detail.RemainingSeconds = &left
 		}
 	}
 
 	return detail, nil
+}
+
+// CurrentMatch returns the id of the match userID is playing right now, or
+// "" when there is none. A match counts only while it is still running in
+// memory, so a game lost to a server restart is never offered.
+func (s *Service) CurrentMatch(ctx context.Context, userID string) (string, error) {
+	ids, err := s.matchRepo.InProgressMatchIDs(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	for _, id := range ids {
+		if _, ok := s.cache.Get(liveMatchKey(id)); ok {
+			return id, nil
+		}
+	}
+	return "", nil
 }
 
 // matchShuffleKey gives each player in a match their own option order.

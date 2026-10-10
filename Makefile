@@ -1,4 +1,4 @@
-.PHONY: build run dev test docker-up docker-down docker-logs docker-logs-frontend docker-db-only db-shell clean deploy deploy-logs deploy-url
+.PHONY: build run dev test docker-up docker-down docker-logs docker-logs-frontend docker-db-only db-shell clean deploy deploy-logs deploy-url live matches errors
 
 # ── Local Development ────────────────────────────────────────────────
 build:
@@ -69,6 +69,25 @@ deploy:
 # Recent production logs.
 deploy-logs:
 	gcloud run services logs read $(SERVICE) --project $(GCP_PROJECT) --region $(GCP_REGION) --limit 100
+
+# Who is online right now and how many are waiting in each queue.
+live:
+	@curl -s $$(gcloud run services describe $(SERVICE) --project $(GCP_PROJECT) --region $(GCP_REGION) --format='value(status.url)')/health; echo
+
+# Recent match events (newest first): matches started, bot matches, results.
+# A "starting match" with no "match ended" after it is still being played.
+matches:
+	@gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="$(SERVICE)" AND jsonPayload.msg=~"starting match|bot match started|match ended|match timer expired"' \
+		--project $(GCP_PROJECT) --limit 30 --freshness 1d \
+		--format='table(timestamp.date("%d %b %H:%M:%S", tz=LOCAL):label=TIME,jsonPayload.msg:label=EVENT,jsonPayload.player_a:label=PLAYER_A,jsonPayload.player_b:label=PLAYER_B,jsonPayload.player:label=PLAYER,jsonPayload.bot:label=BOT,jsonPayload.winner:label=WINNER)'
+
+# Only warnings and errors from the last day: failed requests (STATUS/API)
+# and problems the server logged itself (MESSAGE/ERROR).
+errors:
+	@gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="$(SERVICE)" AND severity>=WARNING' \
+		--project $(GCP_PROJECT) --limit 50 --freshness 1d \
+		--format='table(timestamp.date("%d %b %H:%M:%S", tz=LOCAL):label=TIME,severity,httpRequest.status:label=STATUS,httpRequest.requestMethod:label=METHOD,httpRequest.requestUrl:label=PATH,jsonPayload.msg:label=MESSAGE,jsonPayload.error:label=ERROR)' \
+		| sed -E 's#https://[^/ ]+##'
 
 # The live URL.
 deploy-url:

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/exam-arena/internal/auth"
+	"github.com/exam-arena/internal/chat"
 	"github.com/exam-arena/internal/daily"
 	"github.com/exam-arena/internal/friends"
 	"github.com/exam-arena/internal/leaderboard"
@@ -112,6 +113,11 @@ func main() {
 	practiceService := practice.NewService(practice.NewStore(db), questionStore)
 	leaderboardService := leaderboard.NewService(leaderboard.NewStore(db), memCache)
 	dailyService := daily.NewService(daily.NewStore(db), questionStore)
+	// Global chat: the latest messages live in memory, loaded once here.
+	chatService := chat.NewService(chat.NewStore(db), hub)
+	if err := chatService.Load(context.Background()); err != nil {
+		slog.Warn("chat history not loaded", "error", err)
+	}
 	friendService := friends.NewService(friends.NewStore(db), userStore, matchStore, questionStore, matchService, hub, memCache)
 
 	// Generated questions: fills and rotates a pool in the background, then
@@ -154,6 +160,7 @@ func main() {
 
 	questionPool.Start(bgCtx)
 	go removeStaleGuests(bgCtx, userStore)
+	go closeStaleMatches(bgCtx, matchStore)
 
 	// ── 7. HTTP routes ─────────────────────────────────────────────────
 	handler := routes(cfg, deps{
@@ -172,6 +179,7 @@ func main() {
 		daily:          daily.NewHandler(dailyService),
 		leaderboard:    leaderboard.NewHandler(leaderboardService),
 		generator:      questionpool.NewHandler(questionPool),
+		chat:           chat.NewHandler(chatService),
 		adminStores:    adminStores{questionStore, userStore, matchStore, flagStore},
 	})
 
@@ -217,6 +225,27 @@ func removeStaleGuests(ctx context.Context, userStore *users.Store) {
 			slog.Warn("guest cleanup failed", "error", err)
 		} else if n > 0 {
 			slog.Info("removed stale guest accounts", "count", n)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// closeStaleMatches closes matches that can never finish, every 5 minutes:
+// friend rooms nobody joined (after 30 min, well past the 10 min challenge
+// window) and games lost to a restart (a match lasts 90 s; 15 min is safe).
+func closeStaleMatches(ctx context.Context, matchStore *match.Store) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		cancelled, abandoned, err := matchStore.CloseStaleMatches(ctx, 30*time.Minute, 15*time.Minute)
+		if err != nil {
+			slog.Warn("stale match cleanup failed", "error", err)
+		} else if cancelled+abandoned > 0 {
+			slog.Info("closed stale matches", "unjoined_rooms", cancelled, "lost_games", abandoned)
 		}
 		select {
 		case <-ctx.Done():

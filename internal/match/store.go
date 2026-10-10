@@ -3,6 +3,7 @@ package match
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/exam-arena/internal/models"
 	"github.com/jackc/pgx/v5"
@@ -261,14 +262,66 @@ func (r *Store) GetUserMatchHistory(ctx context.Context, userID string, limit, o
 	return matches, nil
 }
 
+// GetActiveMatchCount counts matches being played right now. Friend rooms
+// still waiting for a second player are not matches yet, so they don't count.
 func (r *Store) GetActiveMatchCount(ctx context.Context) (int, error) {
 	var count int
-	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM matches WHERE status IN ('waiting','starting','in_progress')`).Scan(&count)
+	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM matches WHERE status = 'in_progress'`).Scan(&count)
 	return count, err
+}
+
+// CloseStaleMatches tidies up matches that can never finish:
+//   - rooms still waiting (or starting) after roomTTL: nobody joined, so
+//     they become 'cancelled';
+//   - matches still in_progress after playTTL: the server restarted mid-game
+//     and the in-memory match was lost, so they become 'abandoned'.
+func (r *Store) CloseStaleMatches(ctx context.Context, roomTTL, playTTL time.Duration) (cancelled, abandoned int64, err error) {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE matches SET status = 'cancelled', ended_at = now()
+		WHERE status IN ('waiting', 'starting') AND created_at < now() - $1 * interval '1 second'
+	`, int(roomTTL.Seconds()))
+	if err != nil {
+		return 0, 0, err
+	}
+	cancelled = tag.RowsAffected()
+
+	tag, err = r.db.Exec(ctx, `
+		UPDATE matches SET status = 'abandoned', ended_at = now()
+		WHERE status = 'in_progress' AND COALESCE(started_at, created_at) < now() - $1 * interval '1 second'
+	`, int(playTTL.Seconds()))
+	if err != nil {
+		return cancelled, 0, err
+	}
+	return cancelled, tag.RowsAffected(), nil
 }
 
 func (r *Store) GetTotalMatchCount(ctx context.Context) (int, error) {
 	var count int
 	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM matches`).Scan(&count)
 	return count, err
+}
+
+// InProgressMatchIDs lists the matches userID is in that haven't ended,
+// newest first.
+func (r *Store) InProgressMatchIDs(ctx context.Context, userID string) ([]string, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT m.id FROM matches m
+		JOIN match_players mp ON mp.match_id = m.id
+		WHERE mp.user_id = $1 AND m.status = 'in_progress'
+		ORDER BY m.started_at DESC NULLS LAST
+		LIMIT 5
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }

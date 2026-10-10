@@ -75,6 +75,22 @@ func (r *Store) EnsureBot(ctx context.Context, username, displayName, passwordHa
 	return id, nil
 }
 
+// IsGuest reports whether the account is a demo (guest) account. A missing
+// account counts as a guest, so a deleted user can't keep playing on an
+// old token.
+func (r *Store) IsGuest(ctx context.Context, userID string) (bool, error) {
+	var guest bool
+	err := r.db.QueryRow(ctx,
+		`SELECT is_guest FROM users WHERE id = $1 AND deleted_at IS NULL`, userID).Scan(&guest)
+	if err == pgx.ErrNoRows {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("is guest: %w", err)
+	}
+	return guest, nil
+}
+
 // DeleteStaleGuests removes guest accounts older than maxAge that left
 // nothing other players depend on. Their own data (ratings, stats, practice,
 // friendships, daily attempts…) cascades away. Guests who played a match or

@@ -36,9 +36,9 @@ type botProfile struct {
 
 // Ordered weakest → strongest; botFor picks by the player's rating.
 var botProfiles = []botProfile{
-	{"bot.rookie", "🤖 Rookie", 1050, 0.50, 6 * time.Second, 11 * time.Second},
-	{"bot.ace", "🤖 Ace", 1250, 0.70, 5 * time.Second, 10 * time.Second},
-	{"bot.master", "🤖 Master", 1450, 0.88, 3 * time.Second, 7 * time.Second},
+	{"bot.rookie", "🤖 Rookie", 1050, 0.50, 5 * time.Second, 8 * time.Second},
+	{"bot.ace", "🤖 Ace", 1250, 0.70, 4 * time.Second, 7 * time.Second},
+	{"bot.master", "🤖 Master", 1450, 0.88, 2 * time.Second, 5 * time.Second},
 }
 
 // botFor picks the bot closest to the player's level.

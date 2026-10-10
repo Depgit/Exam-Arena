@@ -40,6 +40,24 @@ func (h *Handler) GetMatch(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, details)
 }
 
+// CurrentMatch godoc
+// GET /api/v1/matches/current
+// Response: { "match_id": "<uuid>" } while the player is in a running match,
+// otherwise { "match_id": null }. The app uses it to send a player who closed
+// the tab back into their match.
+func (h *Handler) CurrentMatch(w http.ResponseWriter, r *http.Request) {
+	id, err := h.matchService.CurrentMatch(r.Context(), middleware.GetUserID(r))
+	if err != nil {
+		respond.Error(w, http.StatusInternalServerError, "failed to look up current match")
+		return
+	}
+	var matchID *string
+	if id != "" {
+		matchID = &id
+	}
+	respond.JSON(w, http.StatusOK, map[string]*string{"match_id": matchID})
+}
+
 // ── Friend Matches ────────────────────────────────────────────────────────
 
 // CreateFriendMatch godoc
