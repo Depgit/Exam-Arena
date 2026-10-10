@@ -27,6 +27,14 @@ type Config struct {
 	QuestionGenRotateEvery    time.Duration
 	QuestionGenPerUser        int
 	QuestionGenMaxPerCategory int // ceiling on questions per category (the bank lives in memory)
+
+	// Sign-in (internal/auth).
+	GoogleClientID string // "Sign in with Google" web client id; "" = off
+	ResendAPIKey   string // email via resend.com; "" = emails are only logged
+	MailFrom       string
+	// EmailVerification: "required" (verify before playing) or "off".
+	// Default: required when ResendAPIKey is set, otherwise off.
+	EmailVerification string
 }
 
 func Load() (*Config, error) {
@@ -60,6 +68,15 @@ func Load() (*Config, error) {
 	cfg.QuestionGenRotateEvery = time.Duration(getEnvInt("QUESTION_GEN_ROTATE_HOURS", 6)) * time.Hour
 	cfg.QuestionGenPerUser = getEnvInt("QUESTION_GEN_PER_USER", 100)
 	cfg.QuestionGenMaxPerCategory = getEnvInt("QUESTION_GEN_MAX_PER_CATEGORY", 5000)
+
+	cfg.GoogleClientID = getEnv("GOOGLE_CLIENT_ID", "")
+	cfg.ResendAPIKey = getEnv("RESEND_API_KEY", "")
+	cfg.MailFrom = getEnv("MAIL_FROM", "Mind Race <noreply@mindrace.in>")
+	defaultVerification := "off"
+	if cfg.ResendAPIKey != "" {
+		defaultVerification = "required"
+	}
+	cfg.EmailVerification = getEnv("EMAIL_VERIFICATION", defaultVerification)
 
 	return cfg, nil
 }

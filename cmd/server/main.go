@@ -35,6 +35,7 @@ import (
 	"github.com/exam-arena/internal/platform/cache"
 	"github.com/exam-arena/internal/platform/config"
 	"github.com/exam-arena/internal/platform/database"
+	"github.com/exam-arena/internal/platform/mailer"
 	"github.com/exam-arena/internal/platform/realtime"
 	"github.com/exam-arena/internal/practice"
 	"github.com/exam-arena/internal/questionpool"
@@ -102,7 +103,19 @@ func main() {
 	hub := realtime.NewHub()
 
 	// ── 5. Features ────────────────────────────────────────────────────
-	authService := auth.NewService(userStore, cfg.JWTSecret, cfg.JWTExpiryHours)
+	mail := mailer.New(cfg.ResendAPIKey, cfg.MailFrom)
+	requireVerified := cfg.EmailVerification == "required"
+	if requireVerified && !mail.Real() {
+		slog.Warn("EMAIL_VERIFICATION=required but RESEND_API_KEY is empty: codes are only written to the log")
+	}
+	if cfg.GoogleClientID == "" {
+		slog.Warn("GOOGLE_CLIENT_ID is empty: Sign in with Google is off")
+	}
+	authService := auth.NewService(userStore, db, cfg.JWTSecret, cfg.JWTExpiryHours, auth.Options{
+		GoogleClientID:       cfg.GoogleClientID,
+		Mailer:               mail,
+		RequireVerifiedEmail: requireVerified,
+	})
 
 	// The queue is created before the match service because a match that
 	// one player declines puts the other player back in it.
@@ -165,23 +178,24 @@ func main() {
 
 	// ── 7. HTTP routes ─────────────────────────────────────────────────
 	handler := routes(cfg, deps{
-		hub:            hub,
-		queue:          queue,
-		connect:        connectHandler,
-		auth:           auth.NewHandler(authService),
-		users:          users.NewHandler(userStore),
-		categories:     questions.NewSubjectHandler(questionStore),
-		topics:         questions.NewTopicHandler(topicStore),
-		flags:          questions.NewFlagHandler(flagStore, questionStore, questionBank),
-		queueEndpoints: matchmaking.NewHandler(matchmakingService),
-		match:          match.NewHandler(matchService),
-		friends:        friends.NewHandler(friendService),
-		practice:       practice.NewHandler(practiceService),
-		daily:          daily.NewHandler(dailyService),
-		leaderboard:    leaderboard.NewHandler(leaderboardService),
-		generator:      questionpool.NewHandler(questionPool),
-		chat:           chat.NewHandler(chatService),
-		adminStores:    adminStores{questionStore, userStore, matchStore, flagStore},
+		hub:                  hub,
+		queue:                queue,
+		connect:              connectHandler,
+		auth:                 auth.NewHandler(authService),
+		users:                users.NewHandler(userStore),
+		categories:           questions.NewSubjectHandler(questionStore),
+		topics:               questions.NewTopicHandler(topicStore),
+		flags:                questions.NewFlagHandler(flagStore, questionStore, questionBank),
+		queueEndpoints:       matchmaking.NewHandler(matchmakingService),
+		match:                match.NewHandler(matchService),
+		friends:              friends.NewHandler(friendService),
+		practice:             practice.NewHandler(practiceService),
+		daily:                daily.NewHandler(dailyService),
+		leaderboard:          leaderboard.NewHandler(leaderboardService),
+		generator:            questionpool.NewHandler(questionPool),
+		chat:                 chat.NewHandler(chatService),
+		requireVerifiedEmail: requireVerified,
+		adminStores:          adminStores{questionStore, userStore, matchStore, flagStore},
 	})
 
 	// ── 8. Start, then shut down cleanly ───────────────────────────────

@@ -41,7 +41,9 @@ type deps struct {
 	leaderboard    *leaderboard.Handler
 	generator      *questionpool.Handler
 	chat           *chat.Handler
-	adminStores    adminStores
+	// requireVerifiedEmail: unverified players can look around but not play.
+	requireVerifiedEmail bool
+	adminStores          adminStores
 }
 
 type adminStores struct {
@@ -60,7 +62,7 @@ func routes(cfg *config.Config, d deps) http.Handler {
 	}
 	// Playing (matches, bots, friend challenges, practice, daily) needs a real
 	// account; demo (guest) accounts can only look around.
-	registered := auth.RegisteredOnly(d.adminStores.users)
+	registered := auth.RegisteredOnly(d.adminStores.users, d.requireVerifiedEmail)
 	canPlay := func(h http.HandlerFunc) http.HandlerFunc { return loggedIn(registered(h)) }
 	// Starting a match also needs the player not to be in one already.
 	canStartMatch := func(h http.HandlerFunc) http.HandlerFunc { return canPlay(d.match.NotInMatch(h)) }
@@ -78,10 +80,14 @@ func routes(cfg *config.Config, d deps) http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/register", d.auth.Register)
 	mux.HandleFunc("POST /api/v1/auth/login", d.auth.Login)
 	mux.HandleFunc("POST /api/v1/auth/guest", d.auth.Guest)
+	mux.HandleFunc("POST /api/v1/auth/google", d.auth.Google)
 	mux.HandleFunc("GET /api/v1/auth/me", loggedIn(d.auth.Me))
+	mux.HandleFunc("POST /api/v1/auth/verify-email/send", loggedIn(d.auth.SendVerificationCode))
+	mux.HandleFunc("POST /api/v1/auth/verify-email", loggedIn(d.auth.VerifyEmail))
 
 	// Player profiles — internal/users
 	mux.HandleFunc("GET /api/v1/users/search", loggedIn(d.users.SearchPlayers))
+	mux.HandleFunc("PATCH /api/v1/users/me", loggedIn(d.users.UpdateMe))
 	mux.HandleFunc("GET /api/v1/users/{id}", d.users.GetProfile)
 	mux.HandleFunc("GET /api/v1/users/{id}/stats", d.users.GetStats)
 	mux.HandleFunc("GET /api/v1/users/{id}/matches", d.users.GetMatchHistory)

@@ -6,28 +6,76 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/exam-arena/internal/models"
+	"github.com/exam-arena/internal/platform/mailer"
 	"github.com/exam-arena/internal/platform/passwords"
 	"github.com/exam-arena/internal/platform/tokens"
 	"github.com/exam-arena/internal/users"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Service struct {
 	userRepo  *users.Store
 	jwtSecret string
 	jwtExpiry int
+
+	google          *googleVerifier
+	codes           *codeStore
+	mail            mailer.Mailer
+	requireVerified bool
 }
 
-func NewService(userRepo *users.Store, jwtSecret string, jwtExpiry int) *Service {
+// Options are the optional sign-in features.
+type Options struct {
+	GoogleClientID string        // "" = Google sign-in off
+	Mailer         mailer.Mailer // sends verification codes
+	// RequireVerifiedEmail: players must verify their email before they
+	// can play or chat (demo accounts are blocked anyway).
+	RequireVerifiedEmail bool
+}
+
+func NewService(userRepo *users.Store, db *pgxpool.Pool, jwtSecret string, jwtExpiry int, opts Options) *Service {
 	return &Service{
-		userRepo:  userRepo,
-		jwtSecret: jwtSecret,
-		jwtExpiry: jwtExpiry,
+		userRepo:        userRepo,
+		jwtSecret:       jwtSecret,
+		jwtExpiry:       jwtExpiry,
+		google:          newGoogleVerifier(opts.GoogleClientID),
+		codes:           &codeStore{db: db},
+		mail:            opts.Mailer,
+		requireVerified: opts.RequireVerifiedEmail,
 	}
+}
+
+// RequireVerifiedEmail reports whether unverified players are kept from playing.
+func (s *Service) RequireVerifiedEmail() bool { return s.requireVerified }
+
+// withFlags fills in the computed fields the app needs about a user.
+func (s *Service) withFlags(u *models.User) *models.User {
+	if u != nil {
+		u.NeedsEmailVerification = s.requireVerified && !u.IsGuest && u.Role != "admin" && u.EmailVerifiedAt == nil
+	}
+	return u
+}
+
+// validateUsername applies the username rules shared by every way of signing up.
+func validateUsername(name string) error {
+	if strings.ContainsFunc(name, unicode.IsSpace) {
+		return errors.New("username can't contain spaces")
+	}
+	if len(name) < 3 || len(name) > 30 {
+		return errors.New("username must be between 3 and 30 characters")
+	}
+	// Reserved prefixes for system accounts (bots, demo guests).
+	if lower := strings.ToLower(name); strings.HasPrefix(lower, "bot.") || strings.HasPrefix(lower, "guest_") {
+		return errors.New("that username is reserved")
+	}
+	return nil
 }
 
 type RegisterRequest struct {
@@ -50,22 +98,15 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*Response,
 	// Phone keyboards often add a space after autocomplete. A username saved
 	// as "chunnu " can never be found again (lookups trim), so trim here.
 	req.Username = strings.TrimSpace(req.Username)
-	req.Email = strings.TrimSpace(req.Email)
-	if strings.ContainsFunc(req.Username, unicode.IsSpace) {
-		return nil, errors.New("username can't contain spaces")
-	}
-	if len(req.Username) < 3 || len(req.Username) > 30 {
-		return nil, errors.New("username must be between 3 and 30 characters")
-	}
-	// Reserved prefixes for system accounts (bots, demo guests).
-	if lower := strings.ToLower(req.Username); strings.HasPrefix(lower, "bot.") || strings.HasPrefix(lower, "guest_") {
-		return nil, errors.New("that username is reserved")
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if err := validateUsername(req.Username); err != nil {
+		return nil, err
 	}
 	if len(req.Password) < 8 {
 		return nil, errors.New("password must be at least 8 characters")
 	}
-	if !strings.Contains(req.Email, "@") {
-		return nil, errors.New("invalid email address")
+	if err := validateEmail(req.Email); err != nil {
+		return nil, err
 	}
 
 	existing, _ := s.userRepo.GetByUsername(ctx, req.Username)
@@ -83,7 +124,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*Response,
 		return nil, errors.New("failed to hash password")
 	}
 
-	user, err := s.userRepo.Create(ctx, req.Username, strings.ToLower(req.Email), hash)
+	user, err := s.userRepo.Create(ctx, req.Username, req.Email, hash)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +134,19 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*Response,
 		return nil, err
 	}
 
-	return &Response{Token: token, User: user}, nil
+	// Email the first verification code straight away, without making the
+	// sign-up wait for the mail service.
+	if s.requireVerified {
+		go func(id, email string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			if err := s.sendCode(ctx, id, email); err != nil {
+				slog.Warn("sign-up verification email failed", "user", id, "error", err)
+			}
+		}(user.ID, user.Email)
+	}
+
+	return &Response{Token: token, User: s.withFlags(user)}, nil
 }
 
 // Guest creates a fresh throwaway demo account and signs it in.
@@ -168,9 +221,10 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*Response, error
 		return nil, err
 	}
 
-	return &Response{Token: token, User: user}, nil
+	return &Response{Token: token, User: s.withFlags(user)}, nil
 }
 
 func (s *Service) GetUser(ctx context.Context, userID string) (*models.User, error) {
-	return s.userRepo.GetByID(ctx, userID)
+	u, err := s.userRepo.GetByID(ctx, userID)
+	return s.withFlags(u), err
 }

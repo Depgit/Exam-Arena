@@ -426,3 +426,87 @@ func (r *Store) GetUserCount(ctx context.Context) (players, demo int, err error)
 	`).Scan(&players, &demo)
 	return players, demo, err
 }
+
+// ── Google sign-in & email verification ─────────────────────────────
+
+// GetByGoogleSub finds the player linked to this Google account, or nil.
+func (r *Store) GetByGoogleSub(ctx context.Context, sub string) (*models.User, error) {
+	var id string
+	err := r.db.QueryRow(ctx, `SELECT id FROM users WHERE google_sub = $1 AND deleted_at IS NULL`, sub).Scan(&id)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get user by google id: %w", err)
+	}
+	return r.GetByID(ctx, id)
+}
+
+// LinkGoogle connects a Google account to an existing player. Google has
+// verified the email, so the player's email counts as verified too.
+func (r *Store) LinkGoogle(ctx context.Context, userID, sub string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE users SET google_sub = $2,
+		       email_verified_at = COALESCE(email_verified_at, now()), updated_at = now()
+		WHERE id = $1
+	`, userID, sub)
+	return err
+}
+
+// CreateFromGoogle inserts a player who signed up with Google. Their email
+// is verified already. passwordHash is of a random secret: they sign in
+// with Google, not a password.
+func (r *Store) CreateFromGoogle(ctx context.Context, username, email, passwordHash, displayName, avatarURL, sub string) (*models.User, error) {
+	var id string
+	var avatar *string
+	if avatarURL != "" {
+		avatar = &avatarURL
+	}
+	err := r.db.QueryRow(ctx, `
+		INSERT INTO users (username, email, password_hash, display_name, avatar_url, google_sub, email_verified_at)
+		VALUES ($1, $2, $3, $4, $5, $6, now())
+		RETURNING id
+	`, username, email, passwordHash, displayName, avatar, sub).Scan(&id)
+	if err != nil {
+		return nil, fmt.Errorf("create google user: %w", err)
+	}
+	return r.GetByID(ctx, id)
+}
+
+// PlayStatus reports whether the account is a demo (guest) account and
+// whether its email is verified. A missing user counts as a guest.
+func (r *Store) PlayStatus(ctx context.Context, userID string) (guest, verified bool, err error) {
+	err = r.db.QueryRow(ctx, `
+		SELECT is_guest, email_verified_at IS NOT NULL OR role = 'admin'
+		FROM users WHERE id = $1 AND deleted_at IS NULL
+	`, userID).Scan(&guest, &verified)
+	if err == pgx.ErrNoRows {
+		return true, false, nil
+	}
+	return guest, verified, err
+}
+
+// SetEmail changes a player's email (before it is verified — a typo fix).
+func (r *Store) SetEmail(ctx context.Context, userID, email string) error {
+	_, err := r.db.Exec(ctx, `UPDATE users SET email = $2, updated_at = now() WHERE id = $1`, userID, email)
+	return err
+}
+
+// MarkEmailVerified marks the email verified, but only if it is still the
+// address the code was sent to.
+func (r *Store) MarkEmailVerified(ctx context.Context, userID, email string) (bool, error) {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE users SET email_verified_at = now(), updated_at = now()
+		WHERE id = $1 AND email = $2 AND email_verified_at IS NULL
+	`, userID, email)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+// SetDisplayName changes the name other players see.
+func (r *Store) SetDisplayName(ctx context.Context, userID, name string) error {
+	_, err := r.db.Exec(ctx, `UPDATE users SET display_name = $2, updated_at = now() WHERE id = $1`, userID, name)
+	return err
+}

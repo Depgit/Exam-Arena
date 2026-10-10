@@ -2,6 +2,8 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -119,6 +121,75 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respond.JSON(w, http.StatusOK, resp)
+}
+
+// Google signs in with a "Sign in with Google" ID token.
+//
+//	POST /api/v1/auth/google  { "credential": "<id token>", "username": "optional" }
+//
+// A first-time player gets { needs_username, suggested_username } back and
+// sends the same credential again with the username they picked.
+func (h *Handler) Google(w http.ResponseWriter, r *http.Request) {
+	var req GoogleRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil || req.Credential == "" {
+		respond.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	res, err := h.authService.Google(r.Context(), req)
+	if err != nil {
+		respond.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respond.JSON(w, http.StatusOK, res)
+}
+
+// SendVerificationCode emails a fresh 6-digit code.
+//
+//	POST /api/v1/auth/verify-email/send  { "email": "optional new address" }
+func (h *Handler) SendVerificationCode(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if r.ContentLength != 0 {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+			respond.Error(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+	}
+	err := h.authService.SendVerificationCode(r.Context(), middleware.GetUserID(r), req.Email)
+	var tooSoon ErrTooSoon
+	switch {
+	case errors.As(err, &tooSoon):
+		respond.Error(w, http.StatusTooManyRequests, err.Error())
+	case errors.Is(err, ErrAlreadyVerified), errors.Is(err, ErrEmailTaken):
+		respond.Error(w, http.StatusConflict, err.Error())
+	case err != nil && strings.Contains(err.Error(), "send email"):
+		slog.Error("verification email failed", "error", err)
+		respond.Error(w, http.StatusBadGateway, "couldn't send the email right now — try again in a minute")
+	case err != nil:
+		respond.Error(w, http.StatusBadRequest, err.Error())
+	default:
+		respond.JSON(w, http.StatusOK, map[string]string{"status": "sent"})
+	}
+}
+
+// VerifyEmail checks the code and returns the updated user.
+//
+//	POST /api/v1/auth/verify-email  { "code": "123456" }
+func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		respond.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	user, err := h.authService.VerifyEmail(r.Context(), middleware.GetUserID(r), req.Code)
+	if err != nil {
+		respond.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respond.JSON(w, http.StatusOK, user)
 }
 
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {

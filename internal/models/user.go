@@ -3,21 +3,25 @@ package models
 import "time"
 
 type User struct {
-	ID                string     `json:"id"`
-	Username          string     `json:"username"`
-	Email             string     `json:"email,omitempty"`
-	PasswordHash      string     `json:"-"`
-	DisplayName       *string    `json:"display_name"`
-	AvatarURL         *string    `json:"avatar_url"`
-	CountryCode       *string    `json:"country_code"`
-	PreferredLanguage string     `json:"preferred_language"`
-	Role              string     `json:"role"`
-	Status            string     `json:"status"`
-	IsGuest           bool       `json:"is_guest"` // throwaway demo account
-	EmailVerifiedAt   *time.Time `json:"email_verified_at"`
-	LastLoginAt       *time.Time `json:"last_login_at"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
+	ID                string  `json:"id"`
+	Username          string  `json:"username"`
+	Email             string  `json:"email,omitempty"`
+	PasswordHash      string  `json:"-"`
+	DisplayName       *string `json:"display_name"`
+	AvatarURL         *string `json:"avatar_url"`
+	CountryCode       *string `json:"country_code"`
+	PreferredLanguage string  `json:"preferred_language"`
+	Role              string  `json:"role"`
+	Status            string  `json:"status"`
+	IsGuest           bool    `json:"is_guest"` // throwaway demo account
+	// NeedsEmailVerification: verification is switched on and this player
+	// hasn't verified yet, so they can look around but not play. Set by
+	// the auth service, not stored.
+	NeedsEmailVerification bool       `json:"needs_email_verification"`
+	EmailVerifiedAt        *time.Time `json:"email_verified_at"`
+	LastLoginAt            *time.Time `json:"last_login_at"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
 }
 
 type UserRating struct {
