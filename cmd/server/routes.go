@@ -73,6 +73,7 @@ func routes(cfg *config.Config, d deps) http.Handler {
 	mux.HandleFunc("GET /api/v1/auth/me", loggedIn(d.auth.Me))
 
 	// Player profiles — internal/users
+	mux.HandleFunc("GET /api/v1/users/search", loggedIn(d.users.SearchPlayers))
 	mux.HandleFunc("GET /api/v1/users/{id}", d.users.GetProfile)
 	mux.HandleFunc("GET /api/v1/users/{id}/stats", d.users.GetStats)
 	mux.HandleFunc("GET /api/v1/users/{id}/matches", d.users.GetMatchHistory)

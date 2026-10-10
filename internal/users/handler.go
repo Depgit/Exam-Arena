@@ -2,9 +2,11 @@ package users
 
 import (
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/exam-arena/internal/models"
+	"github.com/exam-arena/internal/platform/middleware"
 	"github.com/exam-arena/internal/platform/respond"
 )
 
@@ -72,4 +74,24 @@ func (h *Handler) GetMatchHistory(w http.ResponseWriter, r *http.Request) {
 
 	// This requires match_repo but we keep it simple
 	respond.JSON(w, http.StatusOK, map[string]string{"message": "match history endpoint"})
+}
+
+// SearchPlayers suggests players as you type a name to add as a friend.
+//
+//	GET /api/v1/users/search?q=chu   (at least 2 characters; up to 8 results)
+func (h *Handler) SearchPlayers(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len([]rune(q)) < 2 {
+		respond.JSON(w, http.StatusOK, []PlayerMatch{})
+		return
+	}
+	if len([]rune(q)) > 30 {
+		q = string([]rune(q)[:30])
+	}
+	matches, err := h.userRepo.SearchPlayers(r.Context(), q, middleware.GetUserID(r), 8)
+	if err != nil {
+		respond.Error(w, http.StatusInternalServerError, "search failed")
+		return
+	}
+	respond.JSON(w, http.StatusOK, matches)
 }

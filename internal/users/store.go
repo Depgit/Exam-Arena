@@ -3,6 +3,7 @@ package users
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/exam-arena/internal/models"
@@ -113,6 +114,51 @@ func (r *Store) GetByID(ctx context.Context, id string) (*models.User, error) {
 		return nil, fmt.Errorf("get user by id: %w", err)
 	}
 	return user, nil
+}
+
+// PlayerMatch is one result of a player search.
+type PlayerMatch struct {
+	UserID      string  `json:"user_id"`
+	Username    string  `json:"username"`
+	DisplayName *string `json:"display_name"`
+}
+
+// likeEscaper makes user input safe inside a LIKE pattern: %, _ and \ are
+// matched literally instead of acting as wildcards.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// SearchPlayers finds real players whose username or display name contains
+// query (case-insensitive), for "add a friend" suggestions. Exact and
+// starts-with matches come first. Guests, bots, admins, suspended accounts
+// and excludeID (the person searching) are left out.
+func (r *Store) SearchPlayers(ctx context.Context, query, excludeID string, limit int) ([]PlayerMatch, error) {
+	q := likeEscaper.Replace(strings.TrimSpace(query))
+	rows, err := r.db.Query(ctx, `
+		SELECT id, username, display_name
+		FROM users
+		WHERE deleted_at IS NULL AND status = 'active'
+		  AND NOT is_guest AND NOT is_bot AND role <> 'admin'
+		  AND id::text <> $2
+		  AND (username ILIKE '%' || $1 || '%' ESCAPE '\'
+		       OR display_name ILIKE '%' || $1 || '%' ESCAPE '\')
+		ORDER BY lower(username::text) = lower($3) DESC,
+		         username ILIKE $1 || '%' ESCAPE '\' DESC,
+		         length(username::text), username
+		LIMIT $4
+	`, q, excludeID, strings.TrimSpace(query), limit)
+	if err != nil {
+		return nil, fmt.Errorf("search players: %w", err)
+	}
+	defer rows.Close()
+	out := []PlayerMatch{}
+	for rows.Next() {
+		var m PlayerMatch
+		if err := rows.Scan(&m.UserID, &m.Username, &m.DisplayName); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }
 
 func (r *Store) GetByUsername(ctx context.Context, username string) (*models.User, error) {

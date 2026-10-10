@@ -1,0 +1,19 @@
+# Files NOT uploaded by `gcloud run deploy --source .`
+# (secrets first — env.yaml is passed separately with --env-vars-file)
+.env
+.env.*
+!.env.example
+env.yaml
+
+# Not needed to build the server image
+.git
+.gitignore
+.claude/
+bin/
+docs/
+tmp/
+scripts/
+*.md
+exam-arena-frontend/
+_backup*/
+.DS_Store
