@@ -62,6 +62,8 @@ func routes(cfg *config.Config, d deps) http.Handler {
 	// account; demo (guest) accounts can only look around.
 	registered := auth.RegisteredOnly(d.adminStores.users)
 	canPlay := func(h http.HandlerFunc) http.HandlerFunc { return loggedIn(registered(h)) }
+	// Starting a match also needs the player not to be in one already.
+	canStartMatch := func(h http.HandlerFunc) http.HandlerFunc { return canPlay(d.match.NotInMatch(h)) }
 	adminHandler := admin.NewHandler(d.adminStores.questions, d.adminStores.users, d.adminStores.matches, d.adminStores.flags, d.hub)
 
 	mux := http.NewServeMux()
@@ -85,16 +87,17 @@ func routes(cfg *config.Config, d deps) http.Handler {
 	mux.HandleFunc("GET /api/v1/users/{id}/matches", d.users.GetMatchHistory)
 
 	// Matchmaking queue — internal/matchmaking
-	mux.HandleFunc("POST /api/v1/matches/queue", canPlay(d.queueEndpoints.JoinQueue))
+	mux.HandleFunc("POST /api/v1/matches/queue", canStartMatch(d.queueEndpoints.JoinQueue))
 	mux.HandleFunc("DELETE /api/v1/matches/queue", loggedIn(d.queueEndpoints.LeaveQueue))
 	mux.HandleFunc("GET /api/v1/matches/queue/stats", loggedIn(d.queueEndpoints.QueueStats))
 
 	// Matches: details, private rooms, bots — internal/match
 	mux.HandleFunc("GET /api/v1/matches/current", loggedIn(d.match.CurrentMatch))
 	mux.HandleFunc("GET /api/v1/matches/{id}", loggedIn(d.match.GetMatch))
-	mux.HandleFunc("POST /api/v1/matches/friend", canPlay(d.match.CreateFriendMatch))
-	mux.HandleFunc("POST /api/v1/matches/friend/join", canPlay(d.match.JoinFriendMatch))
-	mux.HandleFunc("POST /api/v1/matches/bot", canPlay(d.match.PlayBot))
+	mux.HandleFunc("POST /api/v1/matches/{id}/leave", loggedIn(d.match.LeaveMatch))
+	mux.HandleFunc("POST /api/v1/matches/friend", canStartMatch(d.match.CreateFriendMatch))
+	mux.HandleFunc("POST /api/v1/matches/friend/join", canStartMatch(d.match.JoinFriendMatch))
+	mux.HandleFunc("POST /api/v1/matches/bot", canStartMatch(d.match.PlayBot))
 
 	// Friends & challenges — internal/friends
 	mux.HandleFunc("GET /api/v1/friends", loggedIn(d.friends.ListFriends))
@@ -102,7 +105,7 @@ func routes(cfg *config.Config, d deps) http.Handler {
 	mux.HandleFunc("POST /api/v1/friends/requests/{id}/accept", loggedIn(d.friends.AcceptRequest))
 	mux.HandleFunc("POST /api/v1/friends/requests/{id}/decline", loggedIn(d.friends.DeclineRequest))
 	mux.HandleFunc("DELETE /api/v1/friends/{userId}", loggedIn(d.friends.RemoveFriend))
-	mux.HandleFunc("POST /api/v1/friends/{userId}/challenge", canPlay(d.friends.ChallengeFriend))
+	mux.HandleFunc("POST /api/v1/friends/{userId}/challenge", canStartMatch(d.friends.ChallengeFriend))
 	mux.HandleFunc("DELETE /api/v1/friends/challenges/{matchId}", loggedIn(d.friends.CloseChallenge))
 
 	// Categories, topics, reporting a question — internal/questions

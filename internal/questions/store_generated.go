@@ -206,6 +206,20 @@ func (r *Store) CountPlayers(ctx context.Context) (int, error) {
 	return n, nil
 }
 
+// CountPublishedHandwritten counts a category's published questions that
+// the generator didn't make (written by admins or seeded).
+func (r *Store) CountPublishedHandwritten(ctx context.Context, categoryID string) (int, error) {
+	var n int
+	err := r.db.QueryRow(ctx, `
+		SELECT count(*) FROM questions
+		WHERE exam_category_id = $1 AND status = 'published' AND source IS DISTINCT FROM 'generated'
+	`, categoryID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count hand-written questions: %w", err)
+	}
+	return n, nil
+}
+
 // ArchiveOldestBeyond keeps only the newest keep published questions in a
 // category — hand-written or generated alike — and archives the rest.
 // Archived questions leave matches, practice and new daily challenges but

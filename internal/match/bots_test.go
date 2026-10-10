@@ -43,3 +43,15 @@ func TestBotPickAccuracy(t *testing.T) {
 		}
 	}
 }
+
+func TestLeaverLastLosesWhateverTheScore(t *testing.T) {
+	// Sorted by score: the leaver was winning when they left.
+	in := []playerResult{{userID: "quitter", score: 500}, {userID: "stayer", score: 100}}
+	out := leaverLast(in, "quitter")
+	if out[0].userID != "stayer" || out[1].userID != "quitter" {
+		t.Fatalf("leaver should be last, got %s, %s", out[0].userID, out[1].userID)
+	}
+	if got := leaverLast(in, ""); got[0].userID != "quitter" {
+		t.Fatalf("nobody left: order should not change")
+	}
+}

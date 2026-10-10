@@ -2,6 +2,7 @@ package match
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -43,6 +44,9 @@ type LiveMatch struct {
 	// unrated: endMatch skips rating and win/loss updates.
 	BotUserID   string
 	cancelTimer context.CancelFunc
+	// leftBy is the player who left (forfeited) the match, if anyone did.
+	// They lose whatever the score. Guarded by mu.
+	leftBy string
 
 	// mu guards every LivePlayer's Score and AnsweredIDs. The hub goroutine
 	// mutates them in SubmitAnswer while HTTP handlers (GetMatchDetails),
@@ -539,6 +543,13 @@ func (s *Service) endMatch(ctx context.Context, lm *LiveMatch) {
 		slog.Error("match ended with no players", "match_id", lm.MatchID)
 		return
 	}
+	// A player who left loses whatever the score: move them to the bottom.
+	lm.mu.RLock()
+	leftBy := lm.leftBy
+	lm.mu.RUnlock()
+	if leftBy != "" {
+		results = leaverLast(results, leftBy)
+	}
 
 	// ── Elo calculation (2-player only) ──────────────────────────────
 	// Compute ELO synchronously so we can include rating changes in the
@@ -559,6 +570,8 @@ func (s *Service) endMatch(ctx context.Context, lm *LiveMatch) {
 		if ratingA != nil && ratingB != nil {
 			var scoreA float64
 			switch {
+			case leftBy != "":
+				scoreA = 1.0 // b left (leaverLast put them second)
 			case a.score > b.score:
 				scoreA = 1.0
 			case a.score == b.score:
@@ -607,8 +620,9 @@ func (s *Service) endMatch(ctx context.Context, lm *LiveMatch) {
 	playerResults := make([]map[string]interface{}, len(results))
 	rank := 0
 	for i, r := range results {
-		// results is sorted by score; equal scores share a rank.
-		if i == 0 || r.score < results[i-1].score {
+		// results is sorted by score; equal scores share a rank — unless
+		// someone left, then the order is final and nobody shares.
+		if i == 0 || r.score < results[i-1].score || leftBy != "" {
 			rank = i + 1
 		}
 		playerResults[i] = map[string]interface{}{
@@ -618,6 +632,9 @@ func (s *Service) endMatch(ctx context.Context, lm *LiveMatch) {
 			"rank":     rank,
 			"correct":  r.correct,
 			"total":    r.total,
+		}
+		if r.userID == leftBy {
+			playerResults[i]["left"] = true
 		}
 		// Unrated matches (bots) send no rating fields, so the client shows
 		// no rating change instead of a misleading "+0".
@@ -633,6 +650,7 @@ func (s *Service) endMatch(ctx context.Context, lm *LiveMatch) {
 		Payload: map[string]interface{}{
 			"match_id": lm.MatchID,
 			"results":  playerResults,
+			"left_by":  leftBy, // "" unless a player left
 		},
 	}
 	for _, r := range results {
@@ -640,10 +658,64 @@ func (s *Service) endMatch(ctx context.Context, lm *LiveMatch) {
 	}
 
 	logArgs := []interface{}{"match_id", lm.MatchID, "winner", results[0].username, "score_a", results[0].score}
+	if leftBy != "" {
+		logArgs = append(logArgs, "left_by", leftBy)
+	}
 	if len(results) > 1 {
 		logArgs = append(logArgs, "score_b", results[1].score)
 	}
 	slog.Info("match ended", logArgs...)
+}
+
+// leaverLast moves the player who left to the end, keeping everyone
+// else in score order.
+func leaverLast(results []playerResult, leftBy string) []playerResult {
+	out := make([]playerResult, 0, len(results))
+	var leaver []playerResult
+	for _, r := range results {
+		if r.userID == leftBy {
+			leaver = append(leaver, r)
+		} else {
+			out = append(out, r)
+		}
+	}
+	return append(out, leaver...)
+}
+
+// ── Leaving a match ────────────────────────────────────────────────────
+
+var (
+	ErrMatchOver  = errors.New("this match has already ended")
+	ErrNotAPlayer = errors.New("you are not playing in this match")
+	ErrInAMatch   = errors.New("you're still in a match — finish it or leave it first")
+)
+
+// LeaveMatch ends a live match early because userID gave up. The other
+// player wins; in a rated match the leaver takes the loss.
+func (s *Service) LeaveMatch(ctx context.Context, matchID, userID string) error {
+	raw, ok := s.cache.Get(liveMatchKey(matchID))
+	if !ok {
+		return ErrMatchOver
+	}
+	lm := raw.(*LiveMatch)
+
+	lm.mu.Lock()
+	_, isPlayer := lm.PlayerStates[userID]
+	if !isPlayer || userID == lm.BotUserID {
+		lm.mu.Unlock()
+		return ErrNotAPlayer
+	}
+	if lm.leftBy == "" {
+		lm.leftBy = userID
+	}
+	lm.mu.Unlock()
+
+	slog.Info("player left match", "match_id", matchID, "user", userID)
+	if lm.cancelTimer != nil {
+		lm.cancelTimer() // stops the clock (and the bot, which shares it)
+	}
+	s.endMatch(ctx, lm)
+	return nil
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────

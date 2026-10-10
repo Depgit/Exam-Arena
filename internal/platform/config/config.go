@@ -22,10 +22,11 @@ type Config struct {
 	RateLimitBurst int
 
 	// Question generator (internal/questiongen, questionpool.Pool).
-	QuestionGenEnabled     bool
-	QuestionGenPoolSize    int
-	QuestionGenRotateEvery time.Duration
-	QuestionGenPerUser     int
+	QuestionGenEnabled        bool
+	QuestionGenPoolSize       int
+	QuestionGenRotateEvery    time.Duration
+	QuestionGenPerUser        int
+	QuestionGenMaxPerCategory int // ceiling on questions per category (the bank lives in memory)
 }
 
 func Load() (*Config, error) {
@@ -58,6 +59,7 @@ func Load() (*Config, error) {
 	cfg.QuestionGenPoolSize = getEnvInt("QUESTION_GEN_POOL_SIZE", 600)
 	cfg.QuestionGenRotateEvery = time.Duration(getEnvInt("QUESTION_GEN_ROTATE_HOURS", 6)) * time.Hour
 	cfg.QuestionGenPerUser = getEnvInt("QUESTION_GEN_PER_USER", 100)
+	cfg.QuestionGenMaxPerCategory = getEnvInt("QUESTION_GEN_MAX_PER_CATEGORY", 5000)
 
 	return cfg, nil
 }

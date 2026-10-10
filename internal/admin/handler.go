@@ -122,7 +122,7 @@ func (h *Handler) PublishQuestion(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetSystemStats(w http.ResponseWriter, r *http.Request) {
-	userCount, _ := h.userRepo.GetUserCount(r.Context())
+	userCount, demoCount, _ := h.userRepo.GetUserCount(r.Context())
 	questionCount, _ := h.questionRepo.GetQuestionCount(r.Context())
 	activeMatches, _ := h.matchRepo.GetActiveMatchCount(r.Context())
 	totalMatches, _ := h.matchRepo.GetTotalMatchCount(r.Context())
@@ -136,7 +136,8 @@ func (h *Handler) GetSystemStats(w http.ResponseWriter, r *http.Request) {
 	active7d, _ := h.userRepo.CountActiveSince(r.Context(), now.Add(-7*24*time.Hour), online)
 
 	respond.JSON(w, http.StatusOK, map[string]interface{}{
-		"users":                  userCount,
+		"users":                  userCount, // real players: no demo accounts, bots or admins
+		"demo_users":             demoCount,
 		"live_users":             len(online),
 		"active_users_24h":       active24h,
 		"active_users_7d":        active7d,

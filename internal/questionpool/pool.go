@@ -18,8 +18,10 @@ import (
 //
 // Matches, practice and the daily challenge read questions exactly as
 // before; this only decides how many generated rows exist. Each category
-// holds PoolSize published generated questions, split evenly across the
-// three difficulties. Every RotateEvery, RotateFraction of them are
+// gets its share of players × PerUser published questions (at most
+// MaxPerCategory); the generator fills whatever the hand-written questions
+// leave of that share, split evenly across the three difficulties. With
+// PerUser = 0 the generated pool is a fixed PoolSize. Every RotateEvery, RotateFraction of them are
 // archived (never deleted while anything refers to them) and replaced
 // with fresh ones, so players keep seeing new questions.
 type Pool struct {
@@ -31,14 +33,21 @@ type Pool struct {
 
 type Config struct {
 	Enabled        bool
-	PoolSize       int           // per category, across all difficulties
+	PoolSize       int           // per category when PerUser is 0 (no player-based sizing)
 	RotateEvery    time.Duration // how often to refresh part of the pool
 	RotateFraction float64       // share of each pool replaced per rotation
-	// PerUser caps all published questions per category at
-	// players × PerUser ÷ categories. Beyond that the oldest are archived,
-	// hand-written or generated alike. 0 disables the cap.
+	// PerUser sizes the question stock by player count: each category
+	// holds players × PerUser ÷ categories published questions. The
+	// generator grows its pool to fill that share, and beyond it the oldest
+	// are archived, hand-written or generated alike. 0 disables this.
 	PerUser int
+	// MaxPerCategory is a ceiling on that share, since the whole bank is
+	// kept in memory. Default 5000.
+	MaxPerCategory int
 }
+
+// minMaxPerCategory is the smallest ceiling New accepts.
+const minMaxPerCategory = 500
 
 func New(repo *questions.Store, bank *questions.Bank, cfg Config) *Pool {
 	if cfg.PoolSize < len(questiongen.Difficulties) {
@@ -46,6 +55,16 @@ func New(repo *questions.Store, bank *questions.Bank, cfg Config) *Pool {
 	}
 	if cfg.RotateEvery <= 0 {
 		cfg.RotateEvery = 6 * time.Hour
+	}
+	// The ceiling archives everything above it, hand-written questions
+	// included, so a tiny value is treated as a typo, not obeyed.
+	if cfg.MaxPerCategory > 0 && cfg.MaxPerCategory < minMaxPerCategory {
+		slog.Warn("QUESTION_GEN_MAX_PER_CATEGORY is too small, using the default",
+			"set", cfg.MaxPerCategory, "minimum", minMaxPerCategory, "using", 5000)
+		cfg.MaxPerCategory = 0
+	}
+	if cfg.MaxPerCategory <= 0 {
+		cfg.MaxPerCategory = 5000
 	}
 	if cfg.RotateFraction <= 0 || cfg.RotateFraction > 1 {
 		cfg.RotateFraction = 0.25
@@ -55,36 +74,55 @@ func New(repo *questions.Store, bank *questions.Bank, cfg Config) *Pool {
 
 func (p *Pool) perLevel() int { return p.cfg.PoolSize / len(questiongen.Difficulties) }
 
-// budget is the current size plan: how many generated questions to keep
-// per difficulty, and how many published questions each category may hold
-// in total (0 = no cap).
-func (p *Pool) budget(ctx context.Context, activeCategories int) (levelTarget, categoryCap int, err error) {
+// budget returns how many published questions each category may hold
+// (0 = no player-based sizing: the generated pool is a fixed PoolSize).
+func (p *Pool) budget(ctx context.Context, activeCategories int) (categoryCap int, err error) {
 	if p.cfg.PerUser <= 0 || activeCategories == 0 {
-		return p.perLevel(), 0, nil
+		return 0, nil
 	}
 	players, err := p.repo.CountPlayers(ctx)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
-	levelTarget, categoryCap = capBudget(p.perLevel(), players, p.cfg.PerUser, activeCategories, len(questiongen.Difficulties))
+	categoryCap = capBudget(players, p.cfg.PerUser, activeCategories, p.cfg.MaxPerCategory)
 	slog.Info("question budget", "players", players, "per_user", p.cfg.PerUser,
-		"total_cap", players*p.cfg.PerUser, "per_category", categoryCap, "generated_per_level", levelTarget)
-	return levelTarget, categoryCap, nil
+		"total", players*p.cfg.PerUser, "per_category", categoryCap, "max_per_category", p.cfg.MaxPerCategory)
+	return categoryCap, nil
 }
 
-// capBudget splits players × perUser evenly across categories, and keeps
-// the generated pool within each category's share so the generator never
-// inserts questions the cap would immediately archive.
-func capBudget(perLevel, players, perUser, categories, levels int) (levelTarget, categoryCap int) {
-	if perUser <= 0 || categories <= 0 || levels <= 0 {
-		return perLevel, 0
+// capBudget splits players × perUser evenly across categories, never more
+// than maxPerCategory each.
+func capBudget(players, perUser, categories, maxPerCategory int) int {
+	if perUser <= 0 || categories <= 0 {
+		return 0
 	}
-	categoryCap = players * perUser / categories
-	levelTarget = perLevel
-	if capped := categoryCap / levels; capped < levelTarget {
-		levelTarget = capped
+	share := players * perUser / categories
+	if maxPerCategory > 0 && share > maxPerCategory {
+		share = maxPerCategory
 	}
-	return levelTarget, categoryCap
+	return share
+}
+
+// generatedPerLevel is how many generated questions each difficulty should
+// hold so that, with the hand-written ones, a category fills its share.
+func generatedPerLevel(categoryCap, handwritten, levels int) int {
+	if levels <= 0 || categoryCap <= handwritten {
+		return 0
+	}
+	return (categoryCap - handwritten) / levels
+}
+
+// levelTarget is generatedPerLevel for one category, or the fixed PoolSize
+// split when player-based sizing is off.
+func (p *Pool) levelTarget(ctx context.Context, catID string, categoryCap int) (int, error) {
+	if categoryCap == 0 {
+		return p.perLevel(), nil
+	}
+	handwritten, err := p.repo.CountPublishedHandwritten(ctx, catID)
+	if err != nil {
+		return 0, err
+	}
+	return generatedPerLevel(categoryCap, handwritten, len(questiongen.Difficulties)), nil
 }
 
 // activeGeneratedCategories maps each generator category code to its id,
@@ -151,7 +189,7 @@ func (p *Pool) fillLocked(ctx context.Context) (map[string]int, error) {
 	if err != nil {
 		return inserted, err
 	}
-	target, categoryCap, err := p.budget(ctx, len(cats))
+	categoryCap, err := p.budget(ctx, len(cats))
 	if err != nil {
 		return inserted, err
 	}
@@ -159,6 +197,10 @@ func (p *Pool) fillLocked(ctx context.Context) (map[string]int, error) {
 		catID, ok := cats[code]
 		if !ok {
 			continue // category missing or deactivated
+		}
+		target, err := p.levelTarget(ctx, catID, categoryCap)
+		if err != nil {
+			return inserted, fmt.Errorf("%s: %w", code, err)
 		}
 		n, trimmed, err := p.fillCategory(ctx, code, catID, target)
 		inserted[code] = n
@@ -275,16 +317,20 @@ func (p *Pool) RotateNow(ctx context.Context) (*FillResult, error) {
 	if err != nil {
 		return res, err
 	}
-	target, _, err := p.budget(ctx, len(cats))
+	categoryCap, err := p.budget(ctx, len(cats))
 	if err != nil {
 		return res, err
 	}
-	retire := int(math.Round(float64(target) * p.cfg.RotateFraction))
 	for _, code := range questiongen.Categories() {
 		catID, ok := cats[code]
 		if !ok {
 			continue
 		}
+		target, err := p.levelTarget(ctx, catID, categoryCap)
+		if err != nil {
+			return res, err
+		}
+		retire := int(math.Round(float64(target) * p.cfg.RotateFraction))
 		for _, d := range questiongen.Difficulties {
 			n, err := p.repo.RetireOldestGenerated(ctx, catID, string(d), retire)
 			if err != nil {

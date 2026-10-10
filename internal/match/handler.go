@@ -58,6 +58,41 @@ func (h *Handler) CurrentMatch(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, map[string]*string{"match_id": matchID})
 }
 
+// LeaveMatch godoc
+// POST /api/v1/matches/{id}/leave
+// Gives up a live match: the other player wins, and in a rated match the
+// leaver takes the loss. Everyone gets the usual match_end message.
+func (h *Handler) LeaveMatch(w http.ResponseWriter, r *http.Request) {
+	err := h.matchService.LeaveMatch(r.Context(), r.PathValue("id"), middleware.GetUserID(r))
+	switch {
+	case errors.Is(err, ErrMatchOver):
+		respond.Error(w, http.StatusConflict, err.Error())
+	case errors.Is(err, ErrNotAPlayer):
+		respond.Error(w, http.StatusForbidden, err.Error())
+	case err != nil:
+		respond.Error(w, http.StatusInternalServerError, "failed to leave match")
+	default:
+		respond.JSON(w, http.StatusOK, map[string]string{"status": "left"})
+	}
+}
+
+// NotInMatch guards the routes that start a new match: a player already
+// in a running match gets 409 instead of a second, overlapping game.
+func (h *Handler) NotInMatch(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, err := h.matchService.CurrentMatch(r.Context(), middleware.GetUserID(r))
+		if err != nil {
+			respond.Error(w, http.StatusInternalServerError, "failed to check for a running match")
+			return
+		}
+		if current != "" {
+			respond.Error(w, http.StatusConflict, ErrInAMatch.Error())
+			return
+		}
+		next(w, r)
+	}
+}
+
 // ── Friend Matches ────────────────────────────────────────────────────────
 
 // CreateFriendMatch godoc

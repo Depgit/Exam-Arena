@@ -429,7 +429,13 @@ func (r *Store) Publish(ctx context.Context, questionID string) error {
 
 func (r *Store) GetQuestionCount(ctx context.Context) (int, error) {
 	var count int
-	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM questions WHERE status = 'published'`).Scan(&count)
+	// Only questions players can actually get: published, in a category
+	// that is switched on.
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM questions q
+		JOIN exam_categories c ON c.id = q.exam_category_id
+		WHERE q.status = 'published' AND c.is_active
+	`).Scan(&count)
 	return count, err
 }
 

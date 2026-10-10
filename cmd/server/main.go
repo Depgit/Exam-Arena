@@ -123,10 +123,11 @@ func main() {
 	// Generated questions: fills and rotates a pool in the background, then
 	// refreshes the question bank. Off unless QUESTION_GEN_ENABLED=true.
 	questionPool := questionpool.New(questionStore, questionBank, questionpool.Config{
-		Enabled:     cfg.QuestionGenEnabled,
-		PoolSize:    cfg.QuestionGenPoolSize,
-		RotateEvery: cfg.QuestionGenRotateEvery,
-		PerUser:     cfg.QuestionGenPerUser,
+		Enabled:        cfg.QuestionGenEnabled,
+		PoolSize:       cfg.QuestionGenPoolSize,
+		RotateEvery:    cfg.QuestionGenRotateEvery,
+		PerUser:        cfg.QuestionGenPerUser,
+		MaxPerCategory: cfg.QuestionGenMaxPerCategory,
 	})
 
 	hub.SetPresenceHook(func(userID string, online bool) {

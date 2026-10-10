@@ -414,8 +414,15 @@ func (r *Store) CountActiveSince(ctx context.Context, since time.Time, onlineIDs
 	return count, err
 }
 
-func (r *Store) GetUserCount(ctx context.Context) (int, error) {
-	var count int
-	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE deleted_at IS NULL`).Scan(&count)
-	return count, err
+// GetUserCount counts real players and, separately, demo (guest) accounts.
+// Bots and admins are in neither.
+func (r *Store) GetUserCount(ctx context.Context) (players, demo int, err error) {
+	err = r.db.QueryRow(ctx, `
+		SELECT
+			COUNT(*) FILTER (WHERE NOT is_guest),
+			COUNT(*) FILTER (WHERE is_guest)
+		FROM users
+		WHERE deleted_at IS NULL AND NOT is_bot AND role <> 'admin'
+	`).Scan(&players, &demo)
+	return players, demo, err
 }
