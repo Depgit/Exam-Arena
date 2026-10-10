@@ -11,7 +11,7 @@ question_bank.json
 !.env.example
 backend/.env
 exam-arena-frontend/.env
-
+env.yaml
 # Tooling
 .claude/
 

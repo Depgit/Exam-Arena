@@ -69,7 +69,7 @@ func (h *ConnectHandler) HandleConnection(w http.ResponseWriter, r *http.Request
 		Payload: map[string]interface{}{
 			"user_id":  claims.UserID,
 			"username": claims.Username,
-			"message":  "connected to Exam Arena",
+			"message":  "connected to Mind Race",
 		},
 	})
 

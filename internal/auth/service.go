@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"unicode"
 
 	"github.com/exam-arena/internal/models"
 	"github.com/exam-arena/internal/platform/passwords"
@@ -46,6 +47,13 @@ type Response struct {
 }
 
 func (s *Service) Register(ctx context.Context, req RegisterRequest) (*Response, error) {
+	// Phone keyboards often add a space after autocomplete. A username saved
+	// as "chunnu " can never be found again (lookups trim), so trim here.
+	req.Username = strings.TrimSpace(req.Username)
+	req.Email = strings.TrimSpace(req.Email)
+	if strings.ContainsFunc(req.Username, unicode.IsSpace) {
+		return nil, errors.New("username can't contain spaces")
+	}
 	if len(req.Username) < 3 || len(req.Username) > 30 {
 		return nil, errors.New("username must be between 3 and 30 characters")
 	}
@@ -134,6 +142,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*Response, error
 	var user *models.User
 	var err error
 
+	req.Login = strings.TrimSpace(req.Login)
 	if strings.Contains(req.Login, "@") {
 		user, err = s.userRepo.GetByEmail(ctx, req.Login)
 	} else {

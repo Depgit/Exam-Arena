@@ -8,6 +8,8 @@ bin/
 docs/
 *.md
 scripts/
-exam-arena-frontend/node_modules
-exam-arena-frontend/dist
-exam-arena-frontend/.env
+env.yaml
+tmp/
+exam-arena-frontend/
+#exam-arena-frontend/dist
+#exam-arena-frontend/.env
